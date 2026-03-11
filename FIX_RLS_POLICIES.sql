@@ -18,7 +18,7 @@ USING (
   student_id = auth.uid()
 );
 
--- Policy 2: Tutors can view submissions assigned to them or open ones
+-- Policy 2: Tutors can view submissions assigned to them or open pending submissions
 CREATE POLICY "tutors_view_submissions"
 ON learning_submissions
 FOR SELECT
@@ -30,11 +30,15 @@ USING (
     AND role = 'tutor'
   )
   AND (
-    -- Tutor can see submissions assigned to them
+    -- Tutor can see submissions specifically assigned to them
     submitted_to_tutor = auth.uid()
     OR
-    -- Tutor can see open submissions
-    submission_type = 'open'
+    -- Tutor can see open submissions that are pending and have NO specific tutor assigned
+    (
+      submission_type = 'open' 
+      AND status = 'pending'
+      AND submitted_to_tutor IS NULL
+    )
   )
 );
 
@@ -58,7 +62,12 @@ USING (
   )
   AND (
     submitted_to_tutor = auth.uid()
-    OR submission_type = 'open'
+    OR
+    (
+      submission_type = 'open' 
+      AND status = 'pending'
+      AND submitted_to_tutor IS NULL
+    )
   )
 )
 WITH CHECK (
@@ -69,7 +78,12 @@ WITH CHECK (
   )
   AND (
     submitted_to_tutor = auth.uid()
-    OR submission_type = 'open'
+    OR
+    (
+      submission_type = 'open' 
+      AND status = 'pending'
+      AND submitted_to_tutor IS NULL
+    )
   )
 );
 
