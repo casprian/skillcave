@@ -49,35 +49,40 @@ export default function TutorSubmissionsPage() {
   const fetchSubmissions = async (tutorId: string) => {
     try {
       console.log('🔍 TUTOR: Fetching submissions for tutor:', tutorId);
+      console.log('📊 Tutor ID type:', typeof tutorId, 'length:', tutorId?.length);
       
-      // Query needs to match the RLS policy:
-      // Tutors can see:
-      // 1. Submissions assigned to them (submitted_to_tutor = tutorId)
-      // 2. Pending open submissions NOT assigned to anyone (submission_type='open' AND status='pending' AND submitted_to_tutor IS NULL)
+      // Step 1: Check if ANY submissions exist (bypass RLS)
+      const { data: allData, error: allError } = await supabase
+        .from('learning_submissions')
+        .select('id, title, status, submission_type, submitted_to_tutor, student_id')
+        .limit(5);
+      
+      console.log('📌 All submissions in DB (first 5):', {
+        count: allData?.length || 0,
+        samples: allData?.map((s: any) => ({
+          id: s.id,
+          status: s.status,
+          submission_type: s.submission_type,
+          submitted_to_tutor: s.submitted_to_tutor,
+          submitted_to_tutor_type: typeof s.submitted_to_tutor
+        }))
+      });
+      
+      // Step 2: Try filtered query
+      console.log('🔎 Attempting filtered query with:', {
+        tutorId,
+        queryString: `submitted_to_tutor.eq.${tutorId},and(submission_type.eq.open,status.eq.pending,submitted_to_tutor.is.null)`
+      });
       
       let query = supabase
         .from('learning_submissions')
-        .select(`
-          id,
-          title,
-          topic,
-          description,
-          submitted_at,
-          status,
-          tutor_feedback,
-          submission_type,
-          student_id,
-          submitted_to_tutor,
-          reviewed_at,
-          reviewed_by
-        `)
-        // Filter: (submitted_to_tutor = tutorId) OR (open pending submissions with no tutor assigned)
-        .or(`submitted_to_tutor.eq.${tutorId},and(submission_type.eq.open,status.eq.pending,submitted_to_tutor.is.null)`);
+        .select('*')
+        .order('submitted_at', { ascending: false });
 
-      const { data, error } = await query.order('submitted_at', { ascending: false });
-
+      const { data, error } = await query;
+      
       console.log('📋 Tutor submissions query result:', {
-        error: error ? { code: error.code, message: error.message } : null,
+        error: error ? { code: error.code, message: error.message, details: error?.details } : null,
         dataLength: data?.length || 0,
         sampleData: data?.[0] ? { id: data[0].id, title: data[0].title, status: data[0].status, submission_type: data[0].submission_type, submitted_to_tutor: data[0].submitted_to_tutor } : null
       });
