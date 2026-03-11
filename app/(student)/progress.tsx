@@ -18,7 +18,7 @@ export default function ProgressPage() {
   const milestones = [
     { id: 1, title: '🎓 Complete React Basics', status: 'completed', date: 'Feb 15, 2026' },
     { id: 2, title: '⭐ 50 Learning Logs Submitted', status: 'in-progress', date: '35/50' },
-    { id: 3, title: '🔥 14-Day Learning Streak', status: 'in-progress', date: '14/14' },
+    { id: 3, title: '🔥 Maintain 14-Day Learning Streak', status: 'in-progress', date: '14/14' },
     { id: 4, title: '✅ Mentor Review 5 Skills', status: 'completed', date: 'Mar 5, 2026' },
   ];
 

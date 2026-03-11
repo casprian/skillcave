@@ -1,52 +1,164 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+
+interface Tutor {
+  id: string;
+  name: string;
+  email: string;
+  specialization: string;
+}
 
 export default function LearningLogPage() {
   const router = useRouter();
-  const [logTitle, setLogTitle] = useState('');
-  const [logContent, setLogContent] = useState('');
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  
+  // Form states
+  const [submissionTitle, setSubmissionTitle] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [description, setDescription] = useState('');
+  const [submitType, setSubmitType] = useState<'open' | 'specific'>('open');
+  const [selectedTutor, setSelectedTutor] = useState<Tutor | null>(null);
+  const [tutors, setTutors] = useState<Tutor[]>([]);
+  
+  // UI states
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tutorModalVisible, setTutorModalVisible] = useState(false);
+  const [submittedLogs, setSubmittedLogs] = useState<any[]>([]);
 
-  const submittedLogs = [
-    {
-      id: 1,
-      title: 'Learned React Hooks',
-      date: 'Mar 7, 2026',
-      time: '2:30 PM',
-      status: 'approved',
-      feedback: 'Great understanding! Well explained.'
-    },
-    {
-      id: 2,
-      title: 'TypeScript Basics',
-      date: 'Mar 5, 2026',
-      time: '3:15 PM',
-      status: 'approved',
-      feedback: 'Excellent work!'
-    },
-    {
-      id: 3,
-      title: 'State Management Practice',
-      date: 'Mar 3, 2026',
-      time: '1:45 PM',
-      status: 'pending',
-      feedback: 'Awaiting mentor review...'
-    },
+  const topics = [
+    'React Native',
+    'TypeScript',
+    'State Management',
+    'UI/UX Design',
+    'Backend API',
+    'Database Design',
+    'Testing',
+    'Performance Optimization',
+    'Security',
+    'Other'
   ];
 
+  useEffect(() => {
+    const loadUserAndTutors = async () => {
+      try {
+        // Get current user
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        setUser(authUser);
+
+        if (authUser) {
+          // Get user profile
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', authUser.email)
+            .maybeSingle();
+
+          if (profileData) {
+            setProfile(profileData);
+          }
+
+          // Fetch all tutors
+          const { data: tutorsData, error: tutorsError } = await supabase
+            .from('profiles')
+            .select('id, email, full_name as name')
+            .eq('role', 'tutor');
+
+          if (!tutorsError && tutorsData) {
+            setTutors(tutorsData);
+          }
+
+          // Fetch submitted logs
+          fetchSubmittedLogs(authUser.id);
+        }
+      } catch (err) {
+        console.error('Error loading data:', err);
+      }
+    };
+
+    loadUserAndTutors();
+  }, []);
+
+  const fetchSubmittedLogs = async (studentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('learning_submissions')
+        .select(`
+          id,
+          title,
+          topic,
+          description,
+          submitted_at,
+          status,
+          tutor_feedback,
+          submitted_to_tutor
+        `)
+        .eq('student_id', studentId)
+        .order('submitted_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching logs:', error);
+      } else {
+        setSubmittedLogs(data || []);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!logTitle || !logContent) {
-      alert('Please fill all fields');
+    if (!submissionTitle || !selectedTopic || !description) {
+      alert('Please fill all required fields');
       return;
     }
+
+    if (submitType === 'specific' && !selectedTutor) {
+      alert('Please select a tutor');
+      return;
+    }
+
     setIsSubmitting(true);
-    setTimeout(() => {
-      alert('Learning log submitted successfully!');
-      setLogTitle('');
-      setLogContent('');
+    try {
+      const submissionData = {
+        student_id: user?.id,
+        title: submissionTitle,
+        topic: selectedTopic,
+        description: description,
+        submitted_at: new Date().toISOString(),
+        status: 'pending',
+        submission_type: submitType,
+        submitted_to_tutor: submitType === 'specific' ? selectedTutor?.id : null,
+        tutor_feedback: null,
+      };
+
+      const { error } = await supabase
+        .from('learning_submissions')
+        .insert([submissionData]);
+
+      if (error) {
+        console.error('Error submitting:', error);
+        alert('Error submitting learning log');
+      } else {
+        alert('Learning submission sent successfully!');
+        setSubmissionTitle('');
+        setSelectedTopic('');
+        setDescription('');
+        setSelectedTutor(null);
+        setSubmitType('open');
+        
+        // Refresh logs
+        if (user?.id) {
+          fetchSubmittedLogs(user.id);
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      alert('An error occurred');
+    } finally {
       setIsSubmitting(false);
-    }, 500);
+    }
   };
 
   return (
@@ -56,104 +168,277 @@ export default function LearningLogPage() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Learning Log</Text>
+        <Text style={styles.headerTitle}>Learning Submission</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.content}>
-        {/* Submit Form */}
+        {/* Submission Form Card */}
         <View style={styles.formCard}>
-          <Text style={styles.formTitle}>📝 Submit Today's Log</Text>
-          
-          <TextInput
-            placeholder="What did you learn today?"
-            value={logTitle}
-            onChangeText={setLogTitle}
-            style={styles.titleInput}
-            placeholderTextColor="#999"
-          />
-          
-          <TextInput
-            placeholder="Write your learning notes, challenges faced, and key takeaways..."
-            value={logContent}
-            onChangeText={setLogContent}
-            style={styles.contentInput}
-            multiline
-            numberOfLines={6}
-            placeholderTextColor="#999"
-            textAlignVertical="top"
-          />
+          <Text style={styles.formTitle}>📚 Submit Your Learning</Text>
+          <Text style={styles.formSubtitle}>Share what you've learned with your mentor</Text>
 
-          <TouchableOpacity 
+          {/* Submission Title */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Submission Title *</Text>
+            <TextInput
+              placeholder="e.g., 'React Hooks Implementation Challenge'"
+              value={submissionTitle}
+              onChangeText={setSubmissionTitle}
+              style={styles.input}
+              placeholderTextColor="#999"
+            />
+          </View>
+
+          {/* Topic Selection */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Topic *</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.topicScroll}
+            >
+              {topics.map((topic) => (
+                <TouchableOpacity
+                  key={topic}
+                  style={[
+                    styles.topicButton,
+                    selectedTopic === topic && styles.topicButtonActive
+                  ]}
+                  onPress={() => setSelectedTopic(topic)}
+                >
+                  <Text
+                    style={[
+                      styles.topicButtonText,
+                      selectedTopic === topic && styles.topicButtonTextActive
+                    ]}
+                  >
+                    {topic}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Description */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Description *</Text>
+            <TextInput
+              placeholder="Describe your learning, challenges faced, key concepts, and resources used..."
+              value={description}
+              onChangeText={setDescription}
+              style={styles.textArea}
+              multiline
+              numberOfLines={6}
+              placeholderTextColor="#999"
+              textAlignVertical="top"
+            />
+            <Text style={styles.charCount}>{description.length}/1000</Text>
+          </View>
+
+          {/* Submission Type Selection */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Submit To *</Text>
+            <View style={styles.submissionTypeContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  submitType === 'open' && styles.typeButtonActive
+                ]}
+                onPress={() => setSubmitType('open')}
+              >
+                <Text style={[
+                  styles.typeButtonText,
+                  submitType === 'open' && styles.typeButtonTextActive
+                ]}>
+                  🌐 Open Submission
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  submitType === 'specific' && styles.typeButtonActive
+                ]}
+                onPress={() => setSubmitType('specific')}
+              >
+                <Text style={[
+                  styles.typeButtonText,
+                  submitType === 'specific' && styles.typeButtonTextActive
+                ]}>
+                  👤 Select Tutor
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Tutor Selection (if specific) */}
+          {submitType === 'specific' && (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Choose Tutor *</Text>
+              <TouchableOpacity
+                style={styles.tutorSelectButton}
+                onPress={() => setTutorModalVisible(true)}
+              >
+                <Text style={styles.tutorSelectText}>
+                  {selectedTutor ? selectedTutor.name : 'Select a tutor...'}
+                </Text>
+                <Text style={styles.chevron}>›</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Info Box */}
+          <View style={styles.infoBox}>
+            <Text style={styles.infoText}>
+              {submitType === 'open' 
+                ? '📢 Open submissions are visible to all tutors in your learning community.'
+                : '🔒 Your submission will be sent directly to the selected tutor.'}
+            </Text>
+          </View>
+
+          {/* Submit Button */}
+          <TouchableOpacity
             style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
             onPress={handleSubmit}
             disabled={isSubmitting}
           >
             <Text style={styles.submitButtonText}>
-              {isSubmitting ? 'Submitting...' : 'Submit Log'}
+              {isSubmitting ? 'Submitting...' : 'Submit Learning'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Guidelines */}
-        <View style={styles.guidelinesCard}>
-          <Text style={styles.guidelinesTitle}>📋 What to Include</Text>
-          <Text style={styles.guidelineText}>• Topics covered today</Text>
-          <Text style={styles.guidelineText}>• Key concepts learned</Text>
-          <Text style={styles.guidelineText}>• Challenges encountered</Text>
-          <Text style={styles.guidelineText}>• Resources used</Text>
-          <Text style={styles.guidelineText}>• Questions for mentor</Text>
-        </View>
-
-        {/* Submitted Logs */}
+        {/* Submitted Logs Section */}
         <View style={styles.logsSection}>
-          <Text style={styles.logsTitle}>📚 Recent Submissions</Text>
+          <Text style={styles.sectionTitle}>📝 Your Submissions</Text>
           
-          {submittedLogs.map((log) => (
-            <View key={log.id} style={styles.logCard}>
-              <View style={styles.logHeader}>
-                <View style={styles.logInfo}>
-                  <Text style={styles.logTitle}>{log.title}</Text>
-                  <Text style={styles.logDate}>{log.date} at {log.time}</Text>
+          {submittedLogs.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateIcon}>📚</Text>
+              <Text style={styles.emptyStateText}>No submissions yet</Text>
+              <Text style={styles.emptyStateSubtext}>Submit your first learning to get started!</Text>
+            </View>
+          ) : (
+            submittedLogs.map((log) => (
+              <View key={log.id} style={styles.submissionCard}>
+                {/* Header */}
+                <View style={styles.submissionHeader}>
+                  <View style={styles.submissionInfo}>
+                    <Text style={styles.submissionTitle}>{log.title}</Text>
+                    <Text style={styles.submissionTopic}>📌 {log.topic}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor:
+                          log.status === 'approved'
+                            ? '#d1fae5'
+                            : log.status === 'rejected'
+                            ? '#fee2e2'
+                            : '#fef3c7',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        {
+                          color:
+                            log.status === 'approved'
+                              ? '#10b981'
+                              : log.status === 'rejected'
+                              ? '#ef4444'
+                              : '#f59e0b',
+                        },
+                      ]}
+                    >
+                      {log.status === 'approved'
+                        ? '✓ Approved'
+                        : log.status === 'rejected'
+                        ? '✗ Rejected'
+                        : '⏳ Pending'}
+                    </Text>
+                  </View>
                 </View>
-                <View style={[
-                  styles.statusBadge,
-                  { backgroundColor: log.status === 'approved' ? '#d1fae5' : '#fef3c7' }
-                ]}>
-                  <Text style={[
-                    styles.statusText,
-                    { color: log.status === 'approved' ? '#10b981' : '#f59e0b' }
-                  ]}>
-                    {log.status === 'approved' ? '✓ Approved' : '⏳ Pending'}
+
+                {/* Meta Info */}
+                <View style={styles.metaInfo}>
+                  <Text style={styles.metaText}>
+                    📅 {new Date(log.submitted_at).toLocaleDateString()}
+                  </Text>
+                  <Text style={styles.metaText}>
+                    🎯 {log.submission_type === 'open' ? 'Open Submission' : `Submitted to ${log.tutor?.full_name || 'Unknown'}`}
                   </Text>
                 </View>
-              </View>
-              <View style={styles.feedbackBox}>
-                <Text style={styles.feedbackLabel}>Mentor Feedback:</Text>
-                <Text style={styles.feedbackText}>{log.feedback}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
 
-        {/* Stats */}
-        <View style={styles.statsCard}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>12</Text>
-            <Text style={styles.statLabel}>Logs Submitted</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>10</Text>
-            <Text style={styles.statLabel}>Approved</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>2</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
+                {/* Description Preview */}
+                <View style={styles.descriptionBox}>
+                  <Text style={styles.descriptionLabel}>Your Submission:</Text>
+                  <Text style={styles.descriptionText} numberOfLines={3}>
+                    {log.description}
+                  </Text>
+                </View>
+
+                {/* Feedback */}
+                {log.tutor_feedback && (
+                  <View style={styles.feedbackBox}>
+                    <Text style={styles.feedbackLabel}>💬 Tutor Feedback:</Text>
+                    <Text style={styles.feedbackText}>{log.tutor_feedback}</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
         </View>
       </View>
+
+      {/* Tutor Selection Modal */}
+      <Modal
+        visible={tutorModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTutorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Your Tutor</Text>
+              <TouchableOpacity onPress={() => setTutorModalVisible(false)}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={tutors}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item: tutor }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.tutorItem,
+                    selectedTutor?.id === tutor.id && styles.tutorItemActive
+                  ]}
+                  onPress={() => {
+                    setSelectedTutor(tutor);
+                    setTutorModalVisible(false);
+                  }}
+                >
+                  <View style={styles.tutorItemContent}>
+                    <Text style={styles.tutorName}>{tutor.name}</Text>
+                    <Text style={styles.tutorEmail}>{tutor.email}</Text>
+                  </View>
+                  {selectedTutor?.id === tutor.id && (
+                    <Text style={styles.selectedCheckmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              scrollEnabled
+              style={{ maxHeight: 400 }}
+            />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -195,7 +480,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 24,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -203,31 +488,136 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   formTitle: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0c4a6e',
+    marginBottom: 4,
+  },
+  formSubtitle: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+    marginBottom: 16,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#0c4a6e',
-    marginBottom: 14,
+    marginBottom: 8,
   },
-  titleInput: {
+  input: {
     borderWidth: 1.5,
     borderColor: '#bfdbfe',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 12,
     fontSize: 14,
     color: '#0c2d4c',
     fontWeight: '500',
   },
-  contentInput: {
+  topicScroll: {
+    marginBottom: 8,
+  },
+  topicButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 10,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+  },
+  topicButtonActive: {
+    backgroundColor: '#0369a1',
+    borderColor: '#0369a1',
+  },
+  topicButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0c4a6e',
+  },
+  topicButtonTextActive: {
+    color: 'white',
+  },
+  textArea: {
     borderWidth: 1.5,
     borderColor: '#bfdbfe',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 14,
     fontSize: 14,
     color: '#0c2d4c',
     fontWeight: '500',
     minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  submissionTypeContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+    alignItems: 'center',
+  },
+  typeButtonActive: {
+    backgroundColor: '#0369a1',
+    borderColor: '#0369a1',
+  },
+  typeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0c4a6e',
+  },
+  typeButtonTextActive: {
+    color: 'white',
+  },
+  tutorSelectButton: {
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  tutorSelectText: {
+    fontSize: 14,
+    color: '#0c4a6e',
+    fontWeight: '500',
+  },
+  chevron: {
+    fontSize: 18,
+    color: '#0369a1',
+    fontWeight: '700',
+  },
+  infoBox: {
+    backgroundColor: '#ecf7ff',
+    borderLeftWidth: 4,
+    borderLeftColor: '#0284c7',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#0c4a6e',
+    fontWeight: '500',
+    lineHeight: 18,
   },
   submitButton: {
     backgroundColor: '#0369a1',
@@ -248,36 +638,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  guidelinesCard: {
-    backgroundColor: '#ecf7ff',
-    borderLeftWidth: 4,
-    borderLeftColor: '#0284c7',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
-  },
-  guidelinesTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0c4a6e',
-    marginBottom: 10,
-  },
-  guidelineText: {
-    fontSize: 13,
-    color: '#475569',
-    fontWeight: '500',
-    marginBottom: 6,
-  },
   logsSection: {
-    marginBottom: 24,
+    marginTop: 24,
   },
-  logsTitle: {
+  sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0c2d4c',
     marginBottom: 14,
   },
-  logCard: {
+  emptyState: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 40,
+    alignItems: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+  },
+  emptyStateIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0c4a6e',
+    marginBottom: 4,
+  },
+  emptyStateSubtext: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  submissionCard: {
     backgroundColor: 'white',
     borderRadius: 12,
     padding: 14,
@@ -288,29 +684,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
   },
-  logHeader: {
+  submissionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  logInfo: {
+  submissionInfo: {
     flex: 1,
   },
-  logTitle: {
+  submissionTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#0c4a6e',
     marginBottom: 4,
   },
-  logDate: {
+  submissionTopic: {
     fontSize: 12,
-    color: '#64748b',
-    fontWeight: '500',
+    color: '#0369a1',
+    fontWeight: '600',
   },
   statusBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 6,
     marginLeft: 10,
   },
@@ -318,55 +714,116 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  feedbackBox: {
-    backgroundColor: '#f0f9ff',
+  metaInfo: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  metaText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  descriptionBox: {
+    backgroundColor: '#f8fafc',
     borderRadius: 8,
     padding: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#0284c7',
+    marginBottom: 10,
   },
-  feedbackLabel: {
+  descriptionLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#0369a1',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  feedbackText: {
+  descriptionText: {
     fontSize: 12,
     color: '#475569',
     fontWeight: '500',
     lineHeight: 18,
   },
-  statsCard: {
+  feedbackBox: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#10b981',
+  },
+  feedbackLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+    marginBottom: 6,
+  },
+  feedbackText: {
+    fontSize: 12,
+    color: '#15803d',
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 16,
+    maxHeight: '80%',
+  },
+  modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
+  modalTitle: {
+    fontSize: 16,
     fontWeight: '800',
+    color: '#0c4a6e',
+  },
+  closeButton: {
+    fontSize: 20,
     color: '#0369a1',
+    fontWeight: '700',
+  },
+  tutorItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tutorItemActive: {
+    backgroundColor: '#ecf7ff',
+  },
+  tutorItemContent: {
+    flex: 1,
+  },
+  tutorName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0c4a6e',
     marginBottom: 4,
   },
-  statLabel: {
+  tutorEmail: {
     fontSize: 12,
     color: '#64748b',
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#e0e7ff',
+  selectedCheckmark: {
+    fontSize: 18,
+    color: '#10b981',
+    fontWeight: '700',
   },
 });

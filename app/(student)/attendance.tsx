@@ -35,14 +35,27 @@ export default function AttendancePage() {
   useEffect(() => {
     const initUser = async () => {
       try {
-        const sessionData = await AsyncStorage.getItem('user_session');
-        if (sessionData) {
-          const { user } = JSON.parse(sessionData);
-          setUserId(user.id);
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          setUserId(authUser.id);
+          // Fetch attendance records for this user
+          const { data, error } = await supabase
+            .from('attendance')
+            .select('*')
+            .eq('user_id', authUser.id)
+            .order('attendance_date', { ascending: false })
+            .limit(30);
+
+          if (!error && data) {
+            setAttendanceRecords(data);
+            calculateStats(data);
+          }
+        } else {
+          alert('Not authenticated. Please login first.');
         }
-        await fetchAttendanceRecords();
       } catch (error) {
         console.error('Error initializing user:', error);
+        alert('Error loading user session');
       }
     };
     initUser();
@@ -51,14 +64,12 @@ export default function AttendancePage() {
   // Fetch attendance records from database
   const fetchAttendanceRecords = async () => {
     try {
-      const sessionData = await AsyncStorage.getItem('user_session');
-      if (!sessionData) return;
+      if (!userId) return;
 
-      const { user } = JSON.parse(sessionData);
       const { data, error } = await supabase
         .from('attendance')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('attendance_date', { ascending: false })
         .limit(30);
 

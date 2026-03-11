@@ -201,6 +201,21 @@ export default function TutorDashboard() {
           )}
         </View>
 
+        {/* Quick Actions */}
+        <TouchableOpacity 
+          style={styles.quickActionCard}
+          onPress={() => router.push('/(tutor)/submissions')}
+        >
+          <View style={styles.quickActionContent}>
+            <Text style={styles.quickActionIcon}>📚</Text>
+            <View style={styles.quickActionText}>
+              <Text style={styles.quickActionTitle}>Student Submissions</Text>
+              <Text style={styles.quickActionDesc}>Review learning logs</Text>
+            </View>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+
         {/* Assignments Title */}
         <Text style={styles.sectionTitle}>📋 Pending Assignments for Review</Text>
 
@@ -376,6 +391,50 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
+  },
+  quickActionCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  quickActionContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quickActionIcon: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  quickActionText: {
+    flex: 1,
+  },
+  quickActionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0c4a6e',
+    marginBottom: 2,
+  },
+  quickActionDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  chevron: {
+    fontSize: 20,
+    color: '#0369a1',
+    fontWeight: '700',
   },
   sectionTitle: {
     fontSize: 18,

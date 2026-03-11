@@ -10,7 +10,7 @@ export default function ProfilePage() {
     { label: 'Enrolled On', value: 'Jan 15, 2026', icon: '📅' },
     { label: 'Days Active', value: '52 days', icon: '📊' },
     { label: 'Total Hours', value: '156 hours', icon: '⏱️' },
-    { label: 'Highest Streak', value: '14 days', icon: '🔥' },
+    { label: 'Learning Streak', value: '14 days', icon: '🔥' },
   ];
 
   const performanceMetrics = [
@@ -22,7 +22,7 @@ export default function ProfilePage() {
 
   const achievements = [
     { id: 1, title: 'Early Bird', description: 'Attended first 5 sessions', icon: '🌅' },
-    { id: 2, title: 'Consistent Learner', description: '7-day learning streak', icon: '✨' },
+    { id: 2, title: 'Consistent Learner', description: 'Maintained 7-day learning streak', icon: '✨' },
     { id: 3, title: 'Mentor\'s Favorite', description: '4 skills reviewed', icon: '⭐' },
     { id: 4, title: 'Never Give Up', description: '100+ learning hours', icon: '💪' },
   ];

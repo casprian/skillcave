@@ -8,6 +8,11 @@ export default function StudentDashboard() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [topPerformers, setTopPerformers] = useState<any[]>([]);
+  const [userRank, setUserRank] = useState<any>(null);
+  const [progressLogs, setProgressLogs] = useState<any[]>([]);
+  const [enrollmentDate, setEnrollmentDate] = useState<string>('Jan 15, 2026');
+  const [currentMonth, setCurrentMonth] = useState<string>('');
 
   useEffect(() => {
     const getUserProfile = async () => {
@@ -27,6 +32,9 @@ export default function StudentDashboard() {
           } else if (profileData) {
             console.log('Profile loaded:', profileData);
             setProfile(profileData);
+
+            // Fetch leaderboard data
+            fetchLeaderboard(authUser.id);
           } else {
             console.log('No profile found for user, defaulting to student role');
             setProfile({ role: 'student' });
@@ -40,21 +48,138 @@ export default function StudentDashboard() {
     getUserProfile();
   }, []);
 
+  const fetchLeaderboard = async (userId: string) => {
+    try {
+      // Set current month display
+      const now = new Date();
+      const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      setCurrentMonth(monthName);
+
+      // Fetch top 3 current month performers from view
+      const { data: leaderboard, error: leaderboardError } = await supabase
+        .from('current_month_top_performers')
+        .select('*')
+        .order('rank', { ascending: true })
+        .limit(3);
+
+      if (leaderboardError) {
+        console.error('Leaderboard fetch error:', leaderboardError);
+        return;
+      }
+
+      // Fetch user's current month rank
+      const { data: userRankData, error: rankError } = await supabase
+        .from('current_month_leaderboard')
+        .select('*')
+        .eq('student_id', userId)
+        .maybeSingle();
+
+      if (rankError && rankError.code !== 'PGRST116') {
+        console.error('User rank fetch error:', rankError);
+      } else if (userRankData) {
+        setUserRank(userRankData);
+      }
+
+      if (leaderboard) {
+        setTopPerformers(leaderboard);
+      }
+
+      // Fetch progress logs with tutor information
+      const { data: submissions, error: submissionError } = await supabase
+        .from('learning_submissions')
+        .select('*')
+        .eq('student_id', userId)
+        .order('submitted_at', { ascending: false });
+
+      if (submissionError && submissionError.code !== 'PGRST116') {
+        console.error('Submissions fetch error:', submissionError);
+        return;
+      }
+
+      if (submissions) {
+        setProgressLogs(submissions);
+      }
+    } catch (err) {
+      console.error('Error fetching leaderboard:', err);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.replace('/(auth)/login');
   };
 
+  // Calculate learning streak (consecutive days of submissions)
+  const calculateLearningStreak = () => {
+    if (!progressLogs || progressLogs.length === 0) return 0;
+
+    // Get unique dates of submissions (in YYYY-MM-DD format)
+    const submissionDates = new Set<string>();
+    progressLogs.forEach((log) => {
+      if (log.submitted_at) {
+        const date = new Date(log.submitted_at);
+        submissionDates.add(date.toISOString().split('T')[0]);
+      }
+    });
+
+    // Sort dates in descending order
+    const sortedDates = Array.from(submissionDates).sort().reverse();
+    
+    if (sortedDates.length === 0) return 0;
+
+    // Calculate consecutive days from today going backwards
+    let streak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < sortedDates.length; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const checkDateStr = checkDate.toISOString().split('T')[0];
+
+      if (sortedDates[i] === checkDateStr) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  };
+
+  // Count unique skills/topics from learning logs
+  const calculateUniqueSkills = () => {
+    if (!progressLogs || progressLogs.length === 0) return 0;
+
+    const uniqueTopics = new Set<string>();
+    progressLogs.forEach((log) => {
+      if (log.topic) {
+        uniqueTopics.add(log.topic);
+      }
+    });
+
+    return uniqueTopics.size;
+  };
+
+  // Calculate approval percentage (approved submissions / total submissions)
+  const calculateApprovalPercentage = () => {
+    if (!progressLogs || progressLogs.length === 0) return 0;
+
+    const approvedCount = progressLogs.filter((log) => log.status === 'approved').length;
+    const percentage = Math.round((approvedCount / progressLogs.length) * 100);
+    
+    return percentage;
+  };
+
   const mainActions = [
     { id: 1, title: 'Mark Attendance', icon: '✓', color: '#0369a1' },
     { id: 2, title: 'Learning Log', icon: '📝', color: '#06b6d4' },
-    { id: 3, title: 'View Progress', icon: '📊', color: '#8b5cf6' },
   ];
 
   const profileStats = [
-    { label: 'Streak', value: '14 days', icon: '🔥', color: '#f59e0b' },
-    { label: 'Skills', value: '6', icon: '🎓', color: '#10b981' },
-    { label: 'Rating', value: '4.8/5', icon: '⭐', color: '#f97316' },
+    { label: 'Learning Streak', value: `${calculateLearningStreak()} days`, icon: '🔥', color: '#f59e0b' },
+    { label: 'Skills', value: calculateUniqueSkills(), icon: '🎓', color: '#10b981' },
+    { label: 'Points', value: userRank?.total_points || '0', icon: '⭐', color: '#f97316' },
   ];
 
   const topLeaderboard = [
@@ -87,8 +212,6 @@ export default function StudentDashboard() {
               router.push('/(student)/attendance');
             } else if (action.id === 2) {
               router.push('/(student)/learning-log');
-            } else if (action.id === 3) {
-              router.push('/(student)/progress');
             }
           }}
         >
@@ -104,25 +227,64 @@ export default function StudentDashboard() {
       ))}
 
       {/* Top Performers */}
-      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Top Performers</Text>
+      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>🏆 Top Performers - {currentMonth}</Text>
+      
+      {/* Points System Legend */}
+      <View style={styles.pointsLegend}>
+        <View style={styles.legendItem}>
+          <Text style={styles.legendIcon}>📝</Text>
+          <Text style={styles.legendText}>Submission: <Text style={styles.legendPoints}>+1 pt</Text></Text>
+        </View>
+        <View style={styles.legendItem}>
+          <Text style={styles.legendIcon}>✅</Text>
+          <Text style={styles.legendText}>Approved: <Text style={styles.legendPoints}>+10 pts</Text></Text>
+        </View>
+      </View>
+
+      {/* Monthly Notice - Compact Badge */}
+      <View style={styles.monthlyNoticeBadge}>
+        <Text style={styles.monthlyBadgeText}>📅 Monthly Competition • Fresh start each month</Text>
+      </View>
+
       <View style={styles.leaderboardCompact}>
-        {topLeaderboard.map((entry, idx) => (
-          <View key={idx} style={[
-            styles.leaderboardCompactItem,
-            idx !== topLeaderboard.length - 1 && styles.leaderboardCompactBorder
-          ]}>
-            <Text style={styles.leaderboardBadge}>{entry.badge}</Text>
-            <View style={styles.leaderboardCompactInfo}>
-              <Text style={[styles.leaderboardCompactName, entry.isUser && styles.userHighlight]}>
-                {entry.name}
-              </Text>
-              <Text style={styles.leaderboardCompactStats}>
-                {entry.hours} • {entry.streak}
-              </Text>
-            </View>
-            {entry.isUser && <View style={styles.youIndicator} />}
+        {topPerformers.length > 0 ? (
+          topPerformers.map((entry, idx) => {
+            const badges = ['👑', '🥈', '🥉'];
+            const isUser = entry.student_id === user?.id;
+            return (
+              <View key={entry.id} style={[
+                styles.leaderboardCompactItem,
+                idx !== topPerformers.length - 1 && styles.leaderboardCompactBorder
+              ]}>
+                <Text style={styles.leaderboardBadge}>{badges[idx] || '🎯'}</Text>
+                <View style={styles.leaderboardCompactInfo}>
+                  <Text style={[styles.leaderboardCompactName, isUser && styles.userHighlight]}>
+                    {entry.name || (entry.email ? entry.email.split('@')[0] : 'Student')} {isUser && '(You)'}
+                  </Text>
+                  <Text style={styles.leaderboardCompactStats}>
+                    {entry.total_points} pts • {entry.approved_count}/{entry.submission_count} approved
+                  </Text>
+                </View>
+                {isUser && <View style={styles.youIndicator} />}
+              </View>
+            );
+          })
+        ) : (
+          <View style={styles.leaderboardCompactItem}>
+            <Text style={styles.emptyLeaderboardText}>Loading leaderboard...</Text>
           </View>
-        ))}
+        )}
+      </View>
+
+      {/* Historical Performance */}
+      <View style={styles.historicalSection}>
+        <Text style={styles.historicalTitle}>📊 Historical Performance</Text>
+        <View style={styles.historicalInfo}>
+          <Text style={styles.historicalText}>View your performance from previous months</Text>
+          <TouchableOpacity style={styles.viewHistoryButton}>
+            <Text style={styles.viewHistoryText}>View Archives →</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -154,6 +316,145 @@ export default function StudentDashboard() {
     </View>
   );
 
+  const renderProgressLogTab = () => (
+    <View>
+      {/* Timeline Header */}
+      <View style={styles.timelineHeader}>
+        <Text style={styles.timelineHeaderTitle}>📚 Your Learning Journey</Text>
+        <Text style={styles.timelineHeaderSubtitle}>
+          Since {enrollmentDate}
+        </Text>
+      </View>
+
+      {/* Timeline Items */}
+      {progressLogs.length > 0 ? (
+        <View style={styles.timelineContainer}>
+          {progressLogs.map((log, idx) => {
+            const isLast = idx === progressLogs.length - 1;
+            const statusColor = 
+              log.status === 'approved' ? '#10b981' :
+              log.status === 'rejected' ? '#ef4444' :
+              '#f59e0b';
+            const statusIcon = 
+              log.status === 'approved' ? '✅' :
+              log.status === 'rejected' ? '❌' :
+              '⏳';
+
+            return (
+              <View key={log.id} style={[styles.timelineItem, !isLast && styles.timelineItemWithLine]}>
+                {/* Timeline Line */}
+                {!isLast && <View style={styles.timelineLine} />}
+
+                {/* Timeline Dot */}
+                <View style={[styles.timelineDot, { backgroundColor: statusColor }]}>
+                  <Text style={styles.timelineIcon}>{statusIcon}</Text>
+                </View>
+
+                {/* Timeline Card */}
+                <View style={styles.timelineCard}>
+                  {/* Status & Date */}
+                  <View style={styles.timelineCardHeader}>
+                    <Text style={[styles.timelineStatus, { color: statusColor }]}>
+                      {log.status === 'approved' ? 'Approved' :
+                       log.status === 'rejected' ? 'Rejected' : 'Pending'}
+                    </Text>
+                    <Text style={styles.timelineDate}>
+                      {new Date(log.submitted_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+
+                  {/* Submission Title & Topic */}
+                  <View style={styles.timelineContent}>
+                    <Text style={styles.timelineTitle}>{log.title}</Text>
+                    <View style={styles.timelineTopicBadge}>
+                      <Text style={styles.timelineTopicText}>{log.topic}</Text>
+                    </View>
+                  </View>
+
+                  {/* Description */}
+                  <Text style={styles.timelineDescription} numberOfLines={2}>
+                    {log.description}
+                  </Text>
+
+                  {/* Tutor Info (if reviewed) */}
+                  {log.reviewed_by && (
+                    <View style={styles.tutorInfoBox}>
+                      <Text style={styles.tutorLabel}>Reviewed by</Text>
+                      <Text style={styles.tutorName}>
+                        👨‍🏫 Tutor
+                      </Text>
+                      {log.reviewed_at && (
+                        <Text style={styles.tutorDate}>
+                          on {new Date(log.reviewed_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Feedback */}
+                  {log.tutor_feedback && (
+                    <View style={[styles.feedbackBox, { borderLeftColor: statusColor }]}>
+                      <Text style={styles.feedbackLabel}>💬 Feedback</Text>
+                      <Text style={styles.feedbackText}>{log.tutor_feedback}</Text>
+                    </View>
+                  )}
+
+                  {/* Submission Type Badge */}
+                  <View style={styles.submissionTypeBadge}>
+                    <Text style={styles.submissionTypeText}>
+                      {log.submission_type === 'open' ? '🌐 Open Submission' : '👤 Targeted Submission'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateIcon}>📭</Text>
+          <Text style={styles.emptyStateTitle}>No submissions yet</Text>
+          <Text style={styles.emptyStateDesc}>
+            Start submitting your learning logs to see your progress timeline
+          </Text>
+        </View>
+      )}
+
+      {/* Summary Stats */}
+      {progressLogs.length > 0 && (
+        <View style={styles.progressSummary}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryIcon}>📊</Text>
+            <Text style={styles.summaryValue}>{progressLogs.length}</Text>
+            <Text style={styles.summaryLabel}>Total Submissions</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryIcon}>✅</Text>
+            <Text style={styles.summaryValue}>
+              {progressLogs.filter(l => l.status === 'approved').length}
+            </Text>
+            <Text style={styles.summaryLabel}>Approved</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryIcon}>⏳</Text>
+            <Text style={styles.summaryValue}>
+              {progressLogs.filter(l => l.status === 'pending').length}
+            </Text>
+            <Text style={styles.summaryLabel}>Pending</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Minimalist Header */}
@@ -182,8 +483,8 @@ export default function StudentDashboard() {
           </View>
         </View>
         <View style={styles.heroProgressRing}>
-          <Text style={styles.progressValue}>92%</Text>
-          <Text style={styles.progressLabel}>Complete</Text>
+          <Text style={styles.progressValue}>{calculateApprovalPercentage()}%</Text>
+          <Text style={styles.progressLabel}>Approved</Text>
         </View>
       </View>
 
@@ -198,6 +499,14 @@ export default function StudentDashboard() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
+          style={[styles.tab, activeTab === 'progress' && styles.tabActive]}
+          onPress={() => setActiveTab('progress')}
+        >
+          <Text style={[styles.tabText, activeTab === 'progress' && styles.tabTextActive]}>
+            Progress Log
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
           style={[styles.tab, activeTab === 'profile' && styles.tabActive]}
           onPress={() => setActiveTab('profile')}
         >
@@ -209,7 +518,9 @@ export default function StudentDashboard() {
 
       {/* Content */}
       <View style={styles.content}>
-        {activeTab === 'overview' ? renderOverviewTab() : renderProfileTab()}
+        {activeTab === 'overview' && renderOverviewTab()}
+        {activeTab === 'progress' && renderProgressLogTab()}
+        {activeTab === 'profile' && renderProfileTab()}
       </View>
 
       {/* Footer Padding */}
@@ -460,6 +771,56 @@ const styles = StyleSheet.create({
     backgroundColor: '#0369a1',
     marginLeft: 8,
   },
+  pointsLegend: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f9ff',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    gap: 12,
+  },
+  legendItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendIcon: {
+    fontSize: 14,
+  },
+  legendText: {
+    fontSize: 11,
+    color: '#0c2d4c',
+    fontWeight: '600',
+  },
+  legendPoints: {
+    color: '#0369a1',
+    fontWeight: '800',
+  },
+  emptyLeaderboardText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  monthlyNoticeBadge: {
+    backgroundColor: '#f3e8ff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e9d5ff',
+  },
+  monthlyBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6d28d9',
+    textAlign: 'center',
+  },
   profileDetailCard: {
     backgroundColor: '#f9f9f9',
     borderRadius: 12,
@@ -499,5 +860,351 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#dc2626',
+  },
+  progressCard: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    marginBottom: 16,
+  },
+  progressCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  progressCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0c2d4c',
+  },
+  progressPercentage: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0369a1',
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#dbeafe',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#0369a1',
+    borderRadius: 4,
+  },
+  progressDesc: {
+    fontSize: 12,
+    color: '#0369a1',
+    fontWeight: '500',
+  },
+  skillCard: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  skillHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  skillName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 2,
+  },
+  skillDesc: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  skillPercent: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0369a1',
+  },
+  achievementGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  achievementCard: {
+    flex: 1,
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  achievementIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  achievementTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  achievementDesc: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  timelineHeader: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  timelineHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 4,
+  },
+  timelineHeaderSubtitle: {
+    fontSize: 13,
+    color: '#0369a1',
+    fontWeight: '500',
+  },
+  timelineContainer: {
+    marginBottom: 24,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    marginBottom: 0,
+    position: 'relative',
+  },
+  timelineItemWithLine: {
+    marginBottom: 8,
+  },
+  timelineLine: {
+    position: 'absolute',
+    left: 19,
+    top: 52,
+    width: 2,
+    height: 100,
+    backgroundColor: '#dbeafe',
+  },
+  timelineDot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    marginTop: 4,
+    zIndex: 10,
+  },
+  timelineIcon: {
+    fontSize: 20,
+  },
+  timelineCard: {
+    flex: 1,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    marginRight: 16,
+  },
+  timelineCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  timelineStatus: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  timelineDate: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  timelineContent: {
+    marginBottom: 8,
+  },
+  timelineTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 6,
+  },
+  timelineTopicBadge: {
+    backgroundColor: '#dbeafe',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  timelineTopicText: {
+    fontSize: 11,
+    color: '#0369a1',
+    fontWeight: '600',
+  },
+  timelineDescription: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '400',
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  tutorInfoBox: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#0369a1',
+  },
+  tutorLabel: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  tutorName: {
+    fontSize: 12,
+    color: '#0c2d4c',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  tutorDate: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  feedbackBox: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#f59e0b',
+  },
+  feedbackLabel: {
+    fontSize: 10,
+    color: '#92400e',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  feedbackText: {
+    fontSize: 12,
+    color: '#78350f',
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  submissionTypeBadge: {
+    backgroundColor: '#f3e8ff',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  submissionTypeText: {
+    fontSize: 10,
+    color: '#7c3aed',
+    fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 4,
+  },
+  emptyStateDesc: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  progressSummary: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 24,
+  },
+  summaryCard: {
+    flex: 1,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  summaryIcon: {
+    fontSize: 24,
+    marginBottom: 6,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0369a1',
+    marginBottom: 2,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  historicalSection: {
+    backgroundColor: '#f0f4f8',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  historicalTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  historicalInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historicalText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  viewHistoryButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#0369a1',
+    borderRadius: 6,
+  },
+  viewHistoryText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
