@@ -1,7 +1,7 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, RefreshControl } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -13,6 +13,7 @@ export default function StudentDashboard() {
   const [progressLogs, setProgressLogs] = useState<any[]>([]);
   const [enrollmentDate, setEnrollmentDate] = useState<string>('Jan 15, 2026');
   const [currentMonth, setCurrentMonth] = useState<string>('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const getUserProfile = async () => {
@@ -48,6 +49,15 @@ export default function StudentDashboard() {
     getUserProfile();
   }, []);
 
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) {
+        fetchLeaderboard(user.id);
+      }
+    }, [user?.id])
+  );
+
   const fetchLeaderboard = async (userId: string) => {
     try {
       // Set current month display
@@ -78,6 +88,17 @@ export default function StudentDashboard() {
         console.error('User rank fetch error:', rankError);
       } else if (userRankData) {
         setUserRank(userRankData);
+      } else {
+        // If no monthly leaderboard entry, fetch total points from profiles as fallback
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('total_points, id')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profileData) {
+          setUserRank({ total_points: profileData.total_points || 0 });
+        }
       }
 
       if (leaderboard) {
@@ -181,6 +202,14 @@ export default function StudentDashboard() {
     { label: 'Skills', value: calculateUniqueSkills(), icon: '🎓', color: '#10b981' },
     { label: 'Points', value: userRank?.total_points || '0', icon: '⭐', color: '#f97316' },
   ];
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    if (user?.id) {
+      await fetchLeaderboard(user.id);
+    }
+    setIsRefreshing(false);
+  }, [user?.id]);
 
   const topLeaderboard = [
     { rank: 1, name: 'You', hours: '156 hrs', streak: '14d', badge: '👑', isUser: true },
@@ -456,7 +485,13 @@ export default function StudentDashboard() {
   );
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={styles.container} 
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+      }
+    >
       {/* Minimalist Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>

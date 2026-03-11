@@ -7,7 +7,29 @@ interface Tutor {
   id: string;
   name: string;
   email: string;
-  specialization: string;
+  auth_id?: string | null;
+}
+
+// Helper function to get tutor's auth UUID from email
+async function getTutorAuthId(email: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('auth_id')
+      .eq('email', email)
+      .eq('role', 'tutor')
+      .maybeSingle();
+    
+    if (error) {
+      console.error('Error fetching tutor auth_id:', error);
+      return null;
+    }
+    
+    return data?.auth_id || null;
+  } catch (err) {
+    console.error('Exception fetching tutor auth_id:', err);
+    return null;
+  }
 }
 
 export default function LearningLogPage() {
@@ -61,13 +83,23 @@ export default function LearningLogPage() {
           }
 
           // Fetch all tutors
+          console.log('Attempting to fetch tutors...');
           const { data: tutorsData, error: tutorsError } = await supabase
             .from('profiles')
-            .select('id, email, full_name as name')
+            .select('id, email, name, auth_id')
             .eq('role', 'tutor');
 
-          if (!tutorsError && tutorsData) {
+          console.log('Tutors query result:', { tutorsData, tutorsError, length: tutorsData?.length });
+
+          if (tutorsError) {
+            console.error('Error fetching tutors:', tutorsError);
+            setTutors([]);
+          } else if (tutorsData && tutorsData.length > 0) {
+            console.log('Setting tutors:', tutorsData);
             setTutors(tutorsData);
+          } else {
+            console.log('No tutors found in database');
+            setTutors([]);
           }
 
           // Fetch submitted logs
@@ -121,15 +153,21 @@ export default function LearningLogPage() {
 
     setIsSubmitting(true);
     try {
+      // For submitted_to_tutor, use auth_id (UUID) if available, otherwise use email for matching
+      let tutorUUID: string | null = null;
+      if (submitType === 'specific' && selectedTutor) {
+        tutorUUID = selectedTutor.auth_id || await getTutorAuthId(selectedTutor.email);
+      }
+      
       const submissionData = {
-        student_id: user?.id,
+        student_id: user?.id?.toString(),
         title: submissionTitle,
         topic: selectedTopic,
         description: description,
         submitted_at: new Date().toISOString(),
         status: 'pending',
         submission_type: submitType,
-        submitted_to_tutor: submitType === 'specific' ? selectedTutor?.id : null,
+        submitted_to_tutor: tutorUUID,
         tutor_feedback: null,
       };
 
@@ -176,7 +214,7 @@ export default function LearningLogPage() {
         {/* Submission Form Card */}
         <View style={styles.formCard}>
           <Text style={styles.formTitle}>📚 Submit Your Learning</Text>
-          <Text style={styles.formSubtitle}>Share what you've learned with your mentor</Text>
+          <Text style={styles.formSubtitle}>Share what you&apos;ve learned with your mentor</Text>
 
           {/* Submission Title */}
           <View style={styles.formGroup}>
