@@ -83,10 +83,17 @@ export default function EnrollScreen() {
     try {
       console.log('📝 Attempting to sign up with email:', email.toLowerCase());
       
-      // Create auth user
+      // Create auth user ONLY - don't insert profile yet
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.toLowerCase(),
         password: password,
+        options: {
+          data: {
+            name: name.trim(),
+            phone: phone.trim(),
+            role: 'student',
+          }
+        }
       });
 
       console.log('📬 SignUp response received');
@@ -101,55 +108,23 @@ export default function EnrollScreen() {
 
       if (authData.user) {
         console.log('✅ User created successfully:', authData.user.id);
+        console.log('User email:', authData.user.email);
         
-        // Now insert the full profile with name, phone, and role
-        try {
-          console.log('📝 Inserting profile data...');
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-              {
-                email: email.toLowerCase(),
-                name: name.trim(),
-                phone: phone.trim(),
-                role: 'student', // Default role
-                enrolled_at: new Date().toISOString(),
-              }
-            ]);
-
-          if (profileError) {
-            console.error('❌ Profile insert error:', profileError.message);
-          } else {
-            console.log('✅ Profile created successfully');
-          }
-        } catch (profileErr: any) {
-          console.error('❌ Profile creation error:', profileErr);
-        }
-        
-        // If we have a session from signup, use it directly
-        if (authData.session) {
-          console.log('✅ Session created during signup, navigating directly...');
-          // Session is active, navigate directly to dashboard
-          setTimeout(() => {
-            router.replace('/(student)');
-          }, 500);
-        } else {
-          // No session, show success and ask user to login
-          Alert.alert('Success', 'Account created successfully! You can now login.', [
-            {
-              text: 'OK',
-              onPress: () => {
-                setName('');
-                setEmail('');
-                setPhone('');
-                setPassword('');
-                setConfirmPassword('');
-                console.log('🔄 Navigating to login...');
-                router.replace('/(auth)/login');
-              }
+        // Show success message
+        Alert.alert('Success', 'Account created! Please login to continue.', [
+          {
+            text: 'OK',
+            onPress: () => {
+              setName('');
+              setEmail('');
+              setPhone('');
+              setPassword('');
+              setConfirmPassword('');
+              console.log('🔄 Navigating to login...');
+              router.replace('/(auth)/login');
             }
-          ]);
-        }
+          }
+        ]);
       } else {
         console.log('⚠️ No user returned from signup');
         Alert.alert('Error', 'No user data returned from server');
