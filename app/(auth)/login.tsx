@@ -46,6 +46,11 @@ export default function LoginScreen() {
       if (data.user) {
         console.log('✅ Login successful for:', data.user.email);
         console.log('User ID:', data.user.id);
+        console.log('📦 Session data:', {
+          sessionToken: data.session ? '✅ Present' : '❌ Missing',
+          sessionExpires: data.session?.expires_at ? new Date(data.session.expires_at * 1000).toISOString() : 'N/A',
+          accessToken: data.session?.access_token ? '✅ Present' : '❌ Missing',
+        });
         
         // Fetch user role
         const { data: profileData, error: profileError } = await supabase
@@ -59,6 +64,17 @@ export default function LoginScreen() {
         }
         
         console.log('User role:', profileData?.role || 'student');
+        
+        // Verify session was saved
+        const { data: { session: savedSession }, error: sessionError } = await supabase.auth.getSession();
+        console.log('📝 [Login] Verifying session save:');
+        if (sessionError) {
+          console.error('   ❌ Error retrieving session:', sessionError.message);
+        } else if (savedSession?.user?.email === data.user.email) {
+          console.log('   ✅ Session saved for:', savedSession.user.email);
+        } else {
+          console.warn('   ⚠️ Session not found after login');
+        }
         
         // Wait a moment for session to be established
         setTimeout(() => {

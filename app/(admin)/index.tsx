@@ -36,7 +36,7 @@ export default function AdminDashboard() {
 
       <View style={styles.content}>
         <Text style={styles.welcomeTitle}>Management Hub 📊</Text>
-        <Text style={styles.userEmail}>{user?.email}</Text>
+        <Text style={styles.userEmail}>{(user as any)?.email}</Text>
 
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>

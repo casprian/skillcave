@@ -76,7 +76,7 @@ export default function SkillsPage() {
     },
   ];
 
-  const getRatingColor = (rating) => {
+  const getRatingColor = (rating: number) => {
     if (rating >= 4.7) return '#10b981';
     if (rating >= 4.0) return '#f59e0b';
     return '#ef4444';

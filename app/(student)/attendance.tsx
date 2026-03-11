@@ -1003,7 +1003,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderLeft: 4,
+    paddingLeft: 12,
+    borderLeftWidth: 4,
     borderLeftColor: '#0369a1',
   },
   quickInfoLabel: {
@@ -1083,7 +1084,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
-    borderLeft: 4,
+    borderLeftWidth: 4,
     borderLeftColor: '#0369a1',
   },
   infoBoxTitle: {

@@ -22,17 +22,17 @@ export default function ProgressPage() {
     { id: 4, title: '✅ Mentor Review 5 Skills', status: 'completed', date: 'Mar 5, 2026' },
   ];
 
-  const getProgressColor = (progress) => {
+  const getProgressColor = (progress: number) => {
     if (progress >= 80) return '#10b981';
     if (progress >= 60) return '#f59e0b';
     return '#ef4444';
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     return status === 'completed' ? '#d1fae5' : status === 'in-progress' ? '#fef3c7' : '#fee2e2';
   };
 
-  const getStatusTextColor = (status) => {
+  const getStatusTextColor = (status: string) => {
     return status === 'completed' ? '#10b981' : status === 'in-progress' ? '#f59e0b' : '#ef4444';
   };
 

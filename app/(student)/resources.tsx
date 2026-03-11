@@ -69,8 +69,8 @@ export default function ResourcesPage() {
     ? resources 
     : resources.filter(r => r.category === selectedCategory);
 
-  const getCategoryIcon = (category) => {
-    const icons = {
+  const getCategoryIcon = (category: string) => {
+    const icons: { [key: string]: string } = {
       videos: '🎥',
       articles: '📄',
       projects: '🚀',
@@ -79,7 +79,7 @@ export default function ResourcesPage() {
     return icons[category] || '📚';
   };
 
-  const getLevelColor = (level) => {
+  const getLevelColor = (level: string) => {
     switch(level) {
       case 'Beginner': return '#10b981';
       case 'Intermediate': return '#f59e0b';

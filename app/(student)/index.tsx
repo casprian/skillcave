@@ -14,84 +14,119 @@ export default function StudentDashboard() {
   const [enrollmentDate, setEnrollmentDate] = useState<string>('Jan 15, 2026');
   const [currentMonth, setCurrentMonth] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [hasInitializedProfile, setHasInitializedProfile] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
-    const getUserProfile = async () => {
+    const loadData = async () => {
       try {
-        console.log('📊 Fetching user profile...');
+        console.log('📊 Loading dashboard...');
         const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
         
         if (!isMounted) return;
         
         if (userError) {
-          console.error('❌ Auth error:', userError);
-          Alert.alert('Error', 'Not logged in. Please log in again.');
-          router.replace('/');
-          return;
+          console.error('❌ [Dashboard] getUser() error:', userError.message);
         }
         
         if (!authUser) {
-          console.error('❌ No authenticated user found');
-          setIsInitialLoading(false);
-          router.replace('/');
+          console.error('❌ [Dashboard] User not found - authUser is null');
+          console.log('💡 [Dashboard] Check:');
+          console.log('   1. Is session persisted in AsyncStorage?');
+          console.log('   2. Did user complete login successfully?');
+          console.log('   3. Is user still authenticated at app/index.tsx level?');
+          setIsLoading(false);
           return;
         }
+        
+        console.log('✅ [Dashboard] User found:', authUser.email);
 
-        console.log('✅ User authenticated:', authUser.email);
         setUser(authUser);
 
-        const { data: profileData, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', authUser.email)
-          .maybeSingle();
+        // Fetch profile and leaderboard in parallel
+        const [profileRes, leaderRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', authUser.email)
+            .maybeSingle(),
+          (async () => {
+            try {
+              const now = new Date();
+              const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+              setCurrentMonth(monthName);
+
+              const [performers, userRank, submissions] = await Promise.all([
+                supabase
+                  .from('current_month_top_performers')
+                  .select('*')
+                  .order('rank', { ascending: true })
+                  .limit(3),
+                supabase
+                  .from('current_month_leaderboard')
+                  .select('*')
+                  .eq('student_id', authUser.id)
+                  .maybeSingle(),
+                supabase
+                  .from('learning_submissions')
+                  .select('*')
+                  .eq('student_id', authUser.id)
+                  .order('submitted_at', { ascending: false })
+              ]);
+
+              if (!isMounted) return { performers: null, userRank: null, submissions: null };
+
+              return {
+                performers: performers.data || [],
+                userRank: userRank.data || null,
+                submissions: submissions.data || []
+              };
+            } catch (err) {
+              console.error('Error fetching leaderboard data:', err);
+              return { performers: null, userRank: null, submissions: null };
+            }
+          })()
+        ]);
 
         if (!isMounted) return;
 
-        if (error && error.code !== 'PGRST116') {
-          console.error('Profile fetch error:', error);
-        } else if (profileData) {
-          console.log('Profile loaded:', profileData);
-          setProfile(profileData);
+        if (profileRes.data) {
+          setProfile(profileRes.data);
         } else {
-          console.log('No profile found for user, defaulting to student role');
           setProfile({ role: 'student' });
         }
 
-        // Fetch leaderboard data
-        if (authUser?.id) {
-          await fetchLeaderboard(authUser.id);
+        if (leaderRes) {
+          if (leaderRes.performers) setTopPerformers(leaderRes.performers);
+          if (leaderRes.userRank) setUserRank(leaderRes.userRank);
+          if (leaderRes.submissions) setProgressLogs(leaderRes.submissions);
         }
 
-        setHasInitializedProfile(true);
-        setIsInitialLoading(false);
+        setIsLoading(false);
       } catch (err) {
-        console.error('Error loading user profile:', err);
+        console.error('❌ Error loading dashboard:', err);
         if (isMounted) {
-          setIsInitialLoading(false);
+          setIsLoading(false);
         }
       }
     };
 
-    getUserProfile();
+    loadData();
 
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // Refresh data when screen comes into focus (only if profile is already loaded)
+  // Refresh only when screen refocuses after initial load
   useFocusEffect(
     useCallback(() => {
-      if (hasInitializedProfile && user?.id) {
-        console.log('🔄 Refreshing leaderboard on focus...');
+      if (!isLoading && user?.id) {
+        console.log('🔄 Refreshing on focus...');
         fetchLeaderboard(user.id);
       }
-    }, [hasInitializedProfile, user?.id])
+    }, [isLoading, user?.id])
   );
 
   const fetchLeaderboard = async (userId: string) => {
@@ -520,8 +555,8 @@ export default function StudentDashboard() {
     </View>
   );
 
-  // Show loading screen during initial profile fetch
-  if (isInitialLoading) {
+  // Show loading screen during initial data load
+  if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f9ff' }}>
         <ActivityIndicator size="large" color="#0369a1" />

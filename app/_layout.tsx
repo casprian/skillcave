@@ -1,102 +1,59 @@
 import { useEffect, useState } from 'react';
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import { supabase } from '../lib/supabase';
-import { useRouter } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 export default function RootLayout() {
-  const [session, setSession] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    const checkSessionAndRole = async () => {
+    const initAuth = async () => {
       try {
-        // Get the current session
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        console.log('🔐 [RootLayout] Starting auth check...');
+        
+        // Wait a bit to ensure native modules are initialized
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Get session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ [RootLayout] getSession() error:', error.message);
+        }
+        
+        if (session?.user) {
+          console.log('✅ [RootLayout] Auth check complete - User found:', session.user.email);
+          console.log(`   - User ID: ${session.user.id}`);
+          console.log(`   - Session expires: ${session.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'N/A'}`);
+        } else {
+          console.log('📭 [RootLayout] Auth check complete - No user session');
+        }
         
         if (isMounted) {
-          if (error) {
-            console.error('Session check error:', error);
-            setSession(null);
-            setUserRole(null);
-          } else {
-            console.log('Session status:', currentSession ? 'Active' : 'No session');
-            setSession(currentSession);
-            
-            // Fetch user role if session exists
-            if (currentSession?.user) {
-              try {
-                const { data: profileData, error: profileError } = await supabase
-                  .from('profiles')
-                  .select('role')
-                  .eq('email', currentSession.user.email)
-                  .maybeSingle();
-                
-                if (profileError && profileError.code !== 'PGRST116') {
-                  console.error('Error fetching user role:', profileError);
-                }
-                
-                if (profileData?.role) {
-                  console.log('User role:', profileData.role);
-                  setUserRole(profileData.role);
-                } else {
-                  console.log('No profile found, defaulting to student');
-                  setUserRole('student');
-                }
-              } catch (err) {
-                console.error('Error fetching user role:', err);
-              }
+          // Delay to ensure stable state
+          setTimeout(() => {
+            if (isMounted) {
+              console.log('✅ [RootLayout] Ready to render');
+              setIsReady(true);
             }
-          }
-          setIsLoading(false);
+          }, 500);
         }
-      } catch (err) {
-        console.error('Session check failed:', err);
+      } catch (err: any) {
+        console.error('❌ [RootLayout] Auth failed:', err?.message || err);
         if (isMounted) {
-          setSession(null);
-          setUserRole(null);
-          setIsLoading(false);
+          setTimeout(() => setIsReady(true), 500);
         }
       }
     };
 
-    // Check session immediately
-    checkSessionAndRole();
+    initAuth();
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (isMounted) {
-        console.log('Auth state changed:', _event, session ? 'Session' : 'No session');
-        setSession(session);
-        
-        // Fetch role when auth state changes
-        if (session?.user) {
-          supabase
-            .from('profiles')
-            .select('role')
-            .eq('email', session.user.email)
-            .maybeSingle()
-            .then(({ data, error }) => {
-              if (isMounted) {
-                if (error && error.code !== 'PGRST116') {
-                  console.error('Error fetching role:', error);
-                }
-                if (data?.role) {
-                  setUserRole(data.role);
-                } else {
-                  setUserRole('student');
-                }
-              }
-            })
-            .catch(err => console.error('Error fetching role:', err));
-        } else {
-          setUserRole(null);
-        }
-      }
+    // Auth listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any) => {
+      if (event === 'INITIAL_SESSION') return;
+      console.log('🔄 Auth event:', event);
     });
 
     return () => {
@@ -105,7 +62,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (isLoading) {
+  if (!isReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f9ff' }}>
         <ActivityIndicator size="large" color="#0369a1" />
@@ -113,5 +70,6 @@ export default function RootLayout() {
     );
   }
 
-  return <Slot />;
+  // Always render Stack - Expo Router handles routing automatically via file system
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
