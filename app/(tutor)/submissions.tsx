@@ -10,12 +10,12 @@ interface Submission {
   description: string;
   submitted_at: string;
   status: 'pending' | 'approved' | 'rejected';
-  student: {
-    full_name: string;
-    email: string;
-  };
+  student_id: string;
   tutor_feedback: string | null;
   submission_type: 'open' | 'specific';
+  submitted_to_tutor: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
 }
 
 export default function TutorSubmissionsPage() {
@@ -59,7 +59,10 @@ export default function TutorSubmissionsPage() {
           status,
           tutor_feedback,
           submission_type,
-          student:profiles(full_name, email)
+          student_id,
+          submitted_to_tutor,
+          reviewed_at,
+          reviewed_by
         `)
         .or(`submitted_to_tutor.eq.${tutorId},submission_type.eq.open`);
 
@@ -67,11 +70,14 @@ export default function TutorSubmissionsPage() {
 
       if (error) {
         console.error('Error fetching submissions:', error);
+        setSubmissions([]); // Reset on error
       } else {
+        console.log('Fetched submissions:', data);
         setSubmissions(data || []);
       }
     } catch (err) {
       console.error('Error:', err);
+      setSubmissions([]); // Reset on error
     }
   };
 
@@ -92,13 +98,21 @@ export default function TutorSubmissionsPage() {
 
       if (error) throw error;
 
+      // Update local state immediately
+      setSubmissions(submissions.map(sub => 
+        sub.id === selectedSubmission.id 
+          ? { ...sub, status: 'approved', tutor_feedback: feedback, reviewed_at: new Date().toISOString(), reviewed_by: user?.id }
+          : sub
+      ));
+
       alert('Submission approved!');
       setFeedbackModalVisible(false);
       setFeedback('');
       setSelectedSubmission(null);
 
+      // Refresh from server to ensure consistency
       if (user?.id) {
-        fetchSubmissions(user.id);
+        setTimeout(() => fetchSubmissions(user.id), 500);
       }
     } catch (err) {
       console.error('Error:', err);
@@ -125,13 +139,21 @@ export default function TutorSubmissionsPage() {
 
       if (error) throw error;
 
+      // Update local state immediately
+      setSubmissions(submissions.map(sub => 
+        sub.id === selectedSubmission.id 
+          ? { ...sub, status: 'rejected', tutor_feedback: feedback, reviewed_at: new Date().toISOString(), reviewed_by: user?.id }
+          : sub
+      ));
+
       alert('Submission rejected');
       setFeedbackModalVisible(false);
       setFeedback('');
       setSelectedSubmission(null);
 
+      // Refresh from server to ensure consistency
       if (user?.id) {
-        fetchSubmissions(user.id);
+        setTimeout(() => fetchSubmissions(user.id), 500);
       }
     } catch (err) {
       console.error('Error:', err);
@@ -236,8 +258,8 @@ export default function TutorSubmissionsPage() {
                 {/* Header */}
                 <View style={styles.cardHeader}>
                   <View style={styles.studentInfo}>
-                    <Text style={styles.studentName}>{submission.student?.full_name}</Text>
-                    <Text style={styles.studentEmail}>{submission.student?.email}</Text>
+                    <Text style={styles.studentName}>Student Submission</Text>
+                    <Text style={styles.studentEmail}>ID: {submission.student_id?.substring(0, 8)}</Text>
                   </View>
                   <View
                     style={[
