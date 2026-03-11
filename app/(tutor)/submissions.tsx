@@ -27,7 +27,7 @@ export default function TutorSubmissionsPage() {
   const [feedback, setFeedback] = useState('');
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
 
   useEffect(() => {
     const loadUserAndSubmissions = async () => {
@@ -48,6 +48,13 @@ export default function TutorSubmissionsPage() {
 
   const fetchSubmissions = async (tutorId: string) => {
     try {
+      console.log('🔍 TUTOR: Fetching submissions for tutor:', tutorId);
+      
+      // Query needs to match the RLS policy:
+      // Tutors can see:
+      // 1. Submissions assigned to them (submitted_to_tutor = tutorId)
+      // 2. Pending open submissions NOT assigned to anyone (submission_type='open' AND status='pending' AND submitted_to_tutor IS NULL)
+      
       let query = supabase
         .from('learning_submissions')
         .select(`
@@ -64,20 +71,27 @@ export default function TutorSubmissionsPage() {
           reviewed_at,
           reviewed_by
         `)
-        .or(`submitted_to_tutor.eq.${tutorId},submission_type.eq.open`);
+        // Filter: (submitted_to_tutor = tutorId) OR (open pending submissions with no tutor assigned)
+        .or(`submitted_to_tutor.eq.${tutorId},and(submission_type.eq.open,status.eq.pending,submitted_to_tutor.is.null)`);
 
       const { data, error } = await query.order('submitted_at', { ascending: false });
 
+      console.log('📋 Tutor submissions query result:', {
+        error: error ? { code: error.code, message: error.message } : null,
+        dataLength: data?.length || 0,
+        sampleData: data?.[0] ? { id: data[0].id, title: data[0].title, status: data[0].status, submission_type: data[0].submission_type, submitted_to_tutor: data[0].submitted_to_tutor } : null
+      });
+
       if (error) {
-        console.error('Error fetching submissions:', error);
-        setSubmissions([]); // Reset on error
+        console.error('❌ Error fetching submissions:', error);
+        setSubmissions([]);
       } else {
-        console.log('Fetched submissions:', data);
+        console.log('✅ SUCCESS - Found', data?.length || 0, 'submissions for tutor');
         setSubmissions(data || []);
       }
     } catch (err) {
-      console.error('Error:', err);
-      setSubmissions([]); // Reset on error
+      console.error('💥 Exception fetching submissions:', err);
+      setSubmissions([]);
     }
   };
 
