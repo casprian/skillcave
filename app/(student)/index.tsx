@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
@@ -14,48 +14,84 @@ export default function StudentDashboard() {
   const [enrollmentDate, setEnrollmentDate] = useState<string>('Jan 15, 2026');
   const [currentMonth, setCurrentMonth] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [hasInitializedProfile, setHasInitializedProfile] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const getUserProfile = async () => {
       try {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+        console.log('📊 Fetching user profile...');
+        const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+        
+        if (!isMounted) return;
+        
+        if (userError) {
+          console.error('❌ Auth error:', userError);
+          Alert.alert('Error', 'Not logged in. Please log in again.');
+          router.replace('/');
+          return;
+        }
+        
+        if (!authUser) {
+          console.error('❌ No authenticated user found');
+          setIsInitialLoading(false);
+          router.replace('/');
+          return;
+        }
+
+        console.log('✅ User authenticated:', authUser.email);
         setUser(authUser);
 
-        if (authUser) {
-          const { data: profileData, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('email', authUser.email)
-            .maybeSingle();
+        const { data: profileData, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', authUser.email)
+          .maybeSingle();
 
-          if (error && error.code !== 'PGRST116') {
-            console.error('Profile fetch error:', error);
-          } else if (profileData) {
-            console.log('Profile loaded:', profileData);
-            setProfile(profileData);
+        if (!isMounted) return;
 
-            // Fetch leaderboard data
-            fetchLeaderboard(authUser.id);
-          } else {
-            console.log('No profile found for user, defaulting to student role');
-            setProfile({ role: 'student' });
-          }
+        if (error && error.code !== 'PGRST116') {
+          console.error('Profile fetch error:', error);
+        } else if (profileData) {
+          console.log('Profile loaded:', profileData);
+          setProfile(profileData);
+        } else {
+          console.log('No profile found for user, defaulting to student role');
+          setProfile({ role: 'student' });
         }
+
+        // Fetch leaderboard data
+        if (authUser?.id) {
+          await fetchLeaderboard(authUser.id);
+        }
+
+        setHasInitializedProfile(true);
+        setIsInitialLoading(false);
       } catch (err) {
         console.error('Error loading user profile:', err);
+        if (isMounted) {
+          setIsInitialLoading(false);
+        }
       }
     };
 
     getUserProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Refresh data when screen comes into focus
+  // Refresh data when screen comes into focus (only if profile is already loaded)
   useFocusEffect(
     useCallback(() => {
-      if (user?.id) {
+      if (hasInitializedProfile && user?.id) {
+        console.log('🔄 Refreshing leaderboard on focus...');
         fetchLeaderboard(user.id);
       }
-    }, [user?.id])
+    }, [hasInitializedProfile, user?.id])
   );
 
   const fetchLeaderboard = async (userId: string) => {
@@ -483,6 +519,16 @@ export default function StudentDashboard() {
       )}
     </View>
   );
+
+  // Show loading screen during initial profile fetch
+  if (isInitialLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f9ff' }}>
+        <ActivityIndicator size="large" color="#0369a1" />
+        <Text style={{ marginTop: 12, fontSize: 14, color: '#0369a1', fontWeight: '600' }}>Loading Dashboard...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView 

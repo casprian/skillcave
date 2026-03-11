@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Picker } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'expo-router';
 
@@ -232,7 +233,7 @@ export default function EnrollScreen() {
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={role}
-              onValueChange={(itemValue) => setRole(itemValue)}
+              onValueChange={(itemValue: any) => setRole(itemValue)}
               style={styles.picker}
               enabled={!loading}
             >
