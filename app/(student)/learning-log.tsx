@@ -115,7 +115,7 @@ export default function LearningLogPage() {
 
   const fetchSubmittedLogs = async (studentId: string) => {
     try {
-      console.log('Fetching submitted logs for student:', studentId);
+      console.log('🔍 FETCH SUBMITTED LOGS - Student ID:', studentId, 'Type:', typeof studentId);
       
       const { data, error } = await supabase
         .from('learning_submissions')
@@ -132,16 +132,20 @@ export default function LearningLogPage() {
         .eq('student_id', studentId)
         .order('submitted_at', { ascending: false });
 
-      console.log('Learning submissions query result:', { data, error, dataLength: data?.length });
-
       if (error) {
-        console.error('Error fetching logs:', error);
+        console.error('❌ ERROR fetching logs:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          fullError: error
+        });
         setSubmittedLogs([]);
       } else {
+        console.log('✅ SUCCESS - Found', data?.length || 0, 'submissions');
         setSubmittedLogs(data || []);
       }
     } catch (err) {
-      console.error('Error fetching logs:', err);
+      console.error('💥 EXCEPTION:', err);
       setSubmittedLogs([]);
     }
   };
