@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Picker } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'expo-router';
 
@@ -9,8 +9,11 @@ export default function EnrollScreen() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState('student');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const roles = ['student', 'tutor', 'management', 'admin'];
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -82,6 +85,7 @@ export default function EnrollScreen() {
     
     try {
       console.log('📝 Attempting to sign up with email:', email.toLowerCase());
+      console.log('Selected role:', role);
       
       // Create auth user ONLY - don't insert profile yet
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -91,7 +95,7 @@ export default function EnrollScreen() {
           data: {
             name: name.trim(),
             phone: phone.trim(),
-            role: 'student',
+            role: role,
           }
         }
       });
@@ -109,6 +113,32 @@ export default function EnrollScreen() {
       if (authData.user) {
         console.log('✅ User created successfully:', authData.user.id);
         console.log('User email:', authData.user.email);
+        
+        // Create profile in database
+        try {
+          console.log('📝 Creating profile for user...');
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .insert([
+              {
+                email: email.toLowerCase(),
+                name: name.trim(),
+                phone: phone.trim(),
+                role: role,
+              }
+            ])
+            .select();
+
+          if (profileError) {
+            console.error('❌ Profile creation error:', profileError);
+            // Don't fail signup if profile creation fails - still show success
+          } else {
+            console.log('✅ Profile created successfully:', profileData);
+          }
+        } catch (profileErr) {
+          console.error('❌ Profile creation exception:', profileErr);
+          // Continue anyway
+        }
         
         // Show success message
         Alert.alert('Success', 'Account created! Please login to continue.', [
@@ -196,6 +226,23 @@ export default function EnrollScreen() {
           editable={!loading}
           placeholderTextColor="#999"
         />
+
+        <View style={styles.roleContainer}>
+          <Text style={styles.roleLabel}>Select Your Role</Text>
+          <View style={styles.pickerWrapper}>
+            <Picker
+              selectedValue={role}
+              onValueChange={(itemValue) => setRole(itemValue)}
+              style={styles.picker}
+              enabled={!loading}
+            >
+              <Picker.Item label="Student" value="student" />
+              <Picker.Item label="Tutor" value="tutor" />
+              <Picker.Item label="Management" value="management" />
+              <Picker.Item label="Admin" value="admin" />
+            </Picker>
+          </View>
+        </View>
 
         <TouchableOpacity 
           style={[styles.button, loading && styles.buttonDisabled]} 
@@ -327,5 +374,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 24,
     lineHeight: 16,
+  },
+  roleContainer: {
+    marginBottom: 14,
+  },
+  roleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0c4a6e',
+    marginBottom: 8,
+  },
+  pickerWrapper: {
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 50,
+    color: '#0c2d4c',
   },
 });

@@ -36,7 +36,6 @@ export default function LoginScreen() {
       console.log('📬 Login response received');
       console.log('data:', data);
       console.log('error:', error);
-      console.log('📬 Login response received2');
 
       if (error) {
         console.error('❌ Login error:', error.message);
@@ -48,10 +47,24 @@ export default function LoginScreen() {
         console.log('✅ Login successful for:', data.user.email);
         console.log('User ID:', data.user.id);
         
+        // Fetch user role
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('email', data.user.email)
+          .maybeSingle();
+        
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Error fetching profile:', profileError);
+        }
+        
+        console.log('User role:', profileData?.role || 'student');
+        
         // Wait a moment for session to be established
         setTimeout(() => {
-          console.log('🔄 Navigating to student dashboard...');
-          router.replace('/(student)');
+          const route = profileData?.role === 'tutor' ? '/(tutor)' : '/(student)';
+          console.log('🔄 Navigating to dashboard:', route);
+          router.replace(route);
         }, 500);
       } else {
         console.log('⚠️ No user data returned');

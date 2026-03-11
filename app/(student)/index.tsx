@@ -6,168 +6,202 @@ import { useState, useEffect } from 'react';
 export default function StudentDashboard() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+    const getUserProfile = async () => {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        setUser(authUser);
+
+        if (authUser) {
+          const { data: profileData, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', authUser.email)
+            .maybeSingle();
+
+          if (error && error.code !== 'PGRST116') {
+            console.error('Profile fetch error:', error);
+          } else if (profileData) {
+            console.log('Profile loaded:', profileData);
+            setProfile(profileData);
+          } else {
+            console.log('No profile found for user, defaulting to student role');
+            setProfile({ role: 'student' });
+          }
+        }
+      } catch (err) {
+        console.error('Error loading user profile:', err);
+      }
     };
-    getUser();
+
+    getUserProfile();
   }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.replace('/(auth)/enroll');
+    router.replace('/(auth)/login');
   };
 
-  const quickActions = [
-    { id: 1, title: 'Mark Attendance', icon: '✓', color: '#0369a1', bgColor: '#ecf7ff', route: '/attendance' },
-    { id: 2, title: 'Learning Log', icon: '📝', color: '#0284c7', bgColor: '#f0f9ff', route: '/learning-log' },
-    { id: 3, title: 'View Progress', icon: '📊', color: '#0c4a6e', bgColor: '#e0f2fe', route: '/progress' },
-    { id: 4, title: 'Resources', icon: '📚', color: '#1e40af', bgColor: '#dbeafe', route: '/resources' },
+  const mainActions = [
+    { id: 1, title: 'Mark Attendance', icon: '✓', color: '#0369a1' },
+    { id: 2, title: 'Learning Log', icon: '📝', color: '#06b6d4' },
+    { id: 3, title: 'View Progress', icon: '📊', color: '#8b5cf6' },
   ];
 
-  const profileItems = [
-    { id: 1, label: '📅 Enrolled On', value: 'Jan 15, 2026', route: '/profile' },
-    { id: 2, label: '🔥 Highest Streak', value: '14 days', route: '/profile' },
-    { id: 3, label: '⏳ Days Absent', value: '2 days', route: '/profile' },
-    { id: 4, label: '🎓 Skills Learnt', value: '6 skills', route: '/skills' },
-    { id: 5, label: '✅ Skills Reviewed', value: '4 skills', route: '/skills' },
-    { id: 6, label: '⭐ Avg Rating', value: '4.8/5.0', route: '/profile' },
+  const profileStats = [
+    { label: 'Streak', value: '14 days', icon: '🔥', color: '#f59e0b' },
+    { label: 'Skills', value: '6', icon: '🎓', color: '#10b981' },
+    { label: 'Rating', value: '4.8/5', icon: '⭐', color: '#f97316' },
   ];
 
-  const leaderboardData = [
-    { rank: 1, name: 'Alex Johnson', effort: '156 hours', streak: '14 days', badge: '👑' },
-    { rank: 2, name: 'Sarah Chen', effort: '142 hours', streak: '12 days', badge: '🥈' },
-    { rank: 3, name: 'You', effort: '156 hours', streak: '14 days', badge: '🏆', isUser: true },
-    { rank: 4, name: 'Michael Park', effort: '138 hours', streak: '10 days', badge: '🥉' },
-    { rank: 5, name: 'Emma Wilson', effort: '125 hours', streak: '8 days', badge: '⭐' },
+  const topLeaderboard = [
+    { rank: 1, name: 'You', hours: '156 hrs', streak: '14d', badge: '👑', isUser: true },
+    { rank: 2, name: 'Sarah Chen', hours: '142 hrs', streak: '12d', badge: '🥈' },
+    { rank: 3, name: 'Alex Johnson', hours: '136 hrs', streak: '10d', badge: '🥉' },
   ];
+
+  const renderOverviewTab = () => (
+    <View>
+      {/* Hero Stats */}
+      <View style={styles.statsSection}>
+        {profileStats.map((stat, idx) => (
+          <View key={idx} style={styles.miniStatCard}>
+            <Text style={styles.miniStatIcon}>{stat.icon}</Text>
+            <Text style={styles.miniStatValue}>{stat.value}</Text>
+            <Text style={styles.miniStatLabel}>{stat.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Primary Actions */}
+      <Text style={styles.sectionTitle}>Quick Start</Text>
+      {mainActions.map((action) => (
+        <TouchableOpacity key={action.id} style={styles.primaryActionCard}>
+          <View style={[styles.actionIconBg, { backgroundColor: action.color + '15' }]}>
+            <Text style={styles.largeIcon}>{action.icon}</Text>
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionCardTitle}>{action.title}</Text>
+            <Text style={styles.actionCardDesc}>Start now</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+      ))}
+
+      {/* Top Performers */}
+      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Top Performers</Text>
+      <View style={styles.leaderboardCompact}>
+        {topLeaderboard.map((entry, idx) => (
+          <View key={idx} style={[
+            styles.leaderboardCompactItem,
+            idx !== topLeaderboard.length - 1 && styles.leaderboardCompactBorder
+          ]}>
+            <Text style={styles.leaderboardBadge}>{entry.badge}</Text>
+            <View style={styles.leaderboardCompactInfo}>
+              <Text style={[styles.leaderboardCompactName, entry.isUser && styles.userHighlight]}>
+                {entry.name}
+              </Text>
+              <Text style={styles.leaderboardCompactStats}>
+                {entry.hours} • {entry.streak}
+              </Text>
+            </View>
+            {entry.isUser && <View style={styles.youIndicator} />}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+
+  const renderProfileTab = () => (
+    <View>
+      <View style={styles.profileDetailCard}>
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>Email</Text>
+          <Text style={styles.profileValue}>{user?.email}</Text>
+        </View>
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>Name</Text>
+          <Text style={styles.profileValue}>{profile?.name || 'Not set'}</Text>
+        </View>
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>Phone</Text>
+          <Text style={styles.profileValue}>{profile?.phone || 'Not set'}</Text>
+        </View>
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>Enrolled</Text>
+          <Text style={styles.profileValue}>Jan 15, 2026</Text>
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.dangerButton}>
+        <Text style={styles.dangerButtonText}>Change Password</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Minimalist Header */}
       <View style={styles.header}>
-        <View style={styles.logoHeader}>
+        <View style={styles.headerContent}>
           <Image 
             source={require('../../assets/images/logo.jpeg')}
-            style={styles.logoSmall}
+            style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.brandName}>SkillCave</Text>
+          <Text style={styles.headerTitle}>SkillCave</Text>
         </View>
-        <TouchableOpacity 
-          onPress={handleLogout}
-          style={styles.logoutButton}
-        >
-          <Text style={styles.logoutText}>Logout</Text>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+          <Text style={styles.logoutIcon}>⎋</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        {/* Welcome Section */}
-        <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeTitle}>Welcome Back! 👋</Text>
-          <Text style={styles.userEmail}>{user?.email || 'Student'}</Text>
-        </View>
-
-        {/* Quick Stats */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>12</Text>
-            <Text style={styles.statLabel}>Attendance</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>8</Text>
-            <Text style={styles.statLabel}>Submissions</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>92%</Text>
-            <Text style={styles.statLabel}>Progress</Text>
+      {/* Hero Section */}
+      <View style={styles.heroSection}>
+        <View style={styles.heroContent}>
+          <Text style={styles.heroGreeting}>Welcome, {profile?.name?.split(' ')[0] || 'Student'}! 👋</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleBadgeText}>
+              {profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Student'}
+            </Text>
           </View>
         </View>
-
-        {/* Student Information Section */}
-        <Text style={styles.sectionTitle}>Your Profile</Text>
-        <View style={styles.infoGrid}>
-          {profileItems.map((item) => (
-            <TouchableOpacity 
-              key={item.id}
-              style={styles.infoCard}
-              onPress={() => router.push(`/(student)${item.route}` as any)}
-            >
-              <Text style={styles.infoLabel}>{item.label}</Text>
-              <Text style={styles.infoValue}>{item.value}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.actionsGrid}>
-          {quickActions.map((action) => (
-            <TouchableOpacity 
-              key={action.id}
-              style={[styles.actionCard, { borderLeftColor: action.color }]}
-              onPress={() => router.push(`/(student)${action.route}` as any)}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: action.bgColor }]}>
-                <Text style={[styles.iconText, { color: action.color }]}>
-                  {action.icon}
-                </Text>
-              </View>
-              <Text style={styles.actionTitle}>{action.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Leaderboard Section */}
-        <Text style={styles.sectionTitle}>🏆 Leaderboard</Text>
-        <View style={styles.leaderboardCard}>
-          {leaderboardData.map((entry, idx) => (
-            <View 
-              key={idx} 
-              style={[
-                styles.leaderboardItem,
-                entry.isUser && styles.leaderboardItemUser,
-                idx !== leaderboardData.length - 1 && styles.leaderboardItemBorder
-              ]}
-            >
-              <View style={styles.leaderboardRank}>
-                <Text style={styles.rankBadge}>{entry.badge}</Text>
-                <Text style={styles.rankNumber}>#{entry.rank}</Text>
-              </View>
-              <View style={styles.leaderboardInfo}>
-                <Text style={[styles.leaderboardName, entry.isUser && styles.leaderboardNameHighlight]}>
-                  {entry.name}
-                </Text>
-                <View style={styles.leaderboardStats}>
-                  <Text style={styles.leaderboardStatText}>📚 {entry.effort}</Text>
-                  <Text style={styles.leaderboardStatText}>🔥 {entry.streak}</Text>
-                </View>
-              </View>
-              {entry.isUser && (
-                <View style={styles.youBadge}>
-                  <Text style={styles.youBadgeText}>YOU</Text>
-                </View>
-              )}
-            </View>
-          ))}
-        </View>
-
-        {/* Recent Activity */}
-        <View style={styles.activitySection}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <View style={styles.activityItem}>
-            <Text style={styles.activityDate}>Today</Text>
-            <Text style={styles.activityText}>You marked attendance</Text>
-          </View>
-          <View style={styles.activityItem}>
-            <Text style={styles.activityDate}>Yesterday</Text>
-            <Text style={styles.activityText}>Learning log submitted</Text>
-          </View>
+        <View style={styles.heroProgressRing}>
+          <Text style={styles.progressValue}>92%</Text>
+          <Text style={styles.progressLabel}>Complete</Text>
         </View>
       </View>
+
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
+          onPress={() => setActiveTab('overview')}
+        >
+          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
+            Overview
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'profile' && styles.tabActive]}
+          onPress={() => setActiveTab('profile')}
+        >
+          <Text style={[styles.tabText, activeTab === 'profile' && styles.tabTextActive]}>
+            Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Content */}
+      <View style={styles.content}>
+        {activeTab === 'overview' ? renderOverviewTab() : renderProfileTab()}
+      </View>
+
+      {/* Footer Padding */}
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -175,266 +209,283 @@ export default function StudentDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
   },
   header: {
-    backgroundColor: '#0369a1',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     paddingTop: 50,
-    elevation: 4,
-    shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  logoHeader: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
-  logoSmall: {
+  logo: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0369a1',
+  },
+  logoutBtn: {
     width: 40,
     height: 40,
-    borderRadius: 8,
-    marginRight: 12,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  brandName: {
-    fontSize: 20,
+  logoutIcon: {
+    fontSize: 18,
     fontWeight: '700',
-    color: 'white',
+    color: '#0369a1',
   },
-  logoutButton: {
+  heroSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    backgroundColor: '#f9f9f9',
+  },
+  heroContent: {
+    flex: 1,
+  },
+  heroGreeting: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 10,
+  },
+  roleBadge: {
+    backgroundColor: '#0369a1',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
   },
-  logoutText: {
+  roleBadgeText: {
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
   },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
+  heroProgressRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#0369a1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
   },
-  welcomeSection: {
-    marginBottom: 24,
-  },
-  welcomeTitle: {
+  progressValue: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#0c4a6e',
-    marginBottom: 4,
+    fontWeight: '800',
+    color: 'white',
   },
-  userEmail: {
+  progressLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  tab: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: '#0369a1',
+  },
+  tabText: {
     fontSize: 14,
-    color: '#475569',
+    fontWeight: '600',
+    color: '#94a3b8',
+  },
+  tabTextActive: {
+    color: '#0369a1',
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  statsSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 28,
+    gap: 8,
+  },
+  miniStatCard: {
+    flex: 1,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  miniStatIcon: {
+    fontSize: 24,
+    marginBottom: 6,
+  },
+  miniStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 2,
+  },
+  miniStatLabel: {
+    fontSize: 11,
+    color: '#94a3b8',
     fontWeight: '500',
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#0c2d4c',
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 28,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    borderTopWidth: 3,
-    borderTopColor: '#0369a1',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#0369a1',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 28,
-  },
-  actionCard: {
-    width: '48%',
-    backgroundColor: 'white',
-    borderRadius: 14,
-    padding: 16,
     marginBottom: 12,
-    borderLeftWidth: 4,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    alignItems: 'center',
   },
-  actionIcon: {
-    width: 60,
-    height: 60,
+  primaryActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
     borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  actionIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginRight: 14,
   },
-  iconText: {
-    fontSize: 28,
+  largeIcon: {
+    fontSize: 24,
   },
-  actionTitle: {
+  actionContent: {
+    flex: 1,
+  },
+  actionCardTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#0c2d4c',
-    textAlign: 'center',
+    marginBottom: 2,
   },
-  activitySection: {
-    backgroundColor: 'white',
-    borderRadius: 14,
-    padding: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  activityItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e7ff',
-  },
-  activityDate: {
+  actionCardDesc: {
     fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  chevron: {
+    fontSize: 24,
     color: '#0369a1',
-    fontWeight: '600',
-    marginBottom: 4,
+    fontWeight: '300',
   },
-  activityText: {
-    fontSize: 14,
-    color: '#334155',
-  },
-  infoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 28,
-    gap: 12,
-  },
-  infoCard: {
-    width: '48%',
-    backgroundColor: '#f0f9ff',
-    borderLeftWidth: 3,
-    borderLeftColor: '#0284c7',
-    borderRadius: 12,
-    padding: 14,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  infoValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0369a1',
-  },
-  leaderboardCard: {
-    backgroundColor: 'white',
+  leaderboardCompact: {
+    backgroundColor: '#f9f9f9',
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 28,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
-  leaderboardItem: {
+  leaderboardCompactItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  leaderboardItemUser: {
-    backgroundColor: '#ecf7ff',
-  },
-  leaderboardItemBorder: {
+  leaderboardCompactBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e7ff',
+    borderBottomColor: '#f0f0f0',
   },
-  leaderboardRank: {
-    alignItems: 'center',
-    marginRight: 12,
-    minWidth: 50,
+  leaderboardBadge: {
+    fontSize: 20,
+    marginRight: 10,
   },
-  rankBadge: {
-    fontSize: 24,
-    marginBottom: 2,
-  },
-  rankNumber: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0369a1',
-  },
-  leaderboardInfo: {
+  leaderboardCompactInfo: {
     flex: 1,
   },
-  leaderboardName: {
+  leaderboardCompactName: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#0c4a6e',
+    color: '#0c2d4c',
     marginBottom: 2,
   },
-  leaderboardNameHighlight: {
+  userHighlight: {
     color: '#0369a1',
   },
-  leaderboardStats: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  leaderboardStatText: {
+  leaderboardCompactStats: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#64748b',
+    color: '#94a3b8',
+    fontWeight: '500',
   },
-  youBadge: {
+  youIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#0369a1',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
     marginLeft: 8,
   },
-  youBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: 'white',
+  profileDetailCard: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    marginBottom: 16,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  profileLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94a3b8',
+  },
+  profileValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0c2d4c',
+  },
+  dangerButton: {
+    backgroundColor: '#fee2e2',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  dangerButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#dc2626',
   },
 });
