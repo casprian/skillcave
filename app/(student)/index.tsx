@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 
 export default function StudentDashboard() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -79,7 +79,19 @@ export default function StudentDashboard() {
       {/* Primary Actions */}
       <Text style={styles.sectionTitle}>Quick Start</Text>
       {mainActions.map((action) => (
-        <TouchableOpacity key={action.id} style={styles.primaryActionCard}>
+        <TouchableOpacity 
+          key={action.id} 
+          style={styles.primaryActionCard}
+          onPress={() => {
+            if (action.id === 1) {
+              router.push('/(student)/attendance');
+            } else if (action.id === 2) {
+              router.push('/(student)/learning-log');
+            } else if (action.id === 3) {
+              router.push('/(student)/progress');
+            }
+          }}
+        >
           <View style={[styles.actionIconBg, { backgroundColor: action.color + '15' }]}>
             <Text style={styles.largeIcon}>{action.icon}</Text>
           </View>
