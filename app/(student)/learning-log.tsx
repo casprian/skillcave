@@ -117,6 +117,12 @@ export default function LearningLogPage() {
     try {
       console.log('🔍 FETCH SUBMITTED LOGS - Student ID:', studentId, 'Type:', typeof studentId);
       
+      // Log the current authenticated session
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('📋 Current session user ID:', session?.user?.id);
+      console.log('📋 Session user email:', session?.user?.email);
+      console.log('🔗 Comparing: student_id (', studentId, ') === session.user.id (', session?.user?.id, ')?', studentId === session?.user?.id);
+      
       const { data, error } = await supabase
         .from('learning_submissions')
         .select(`
@@ -137,11 +143,18 @@ export default function LearningLogPage() {
           code: error.code,
           message: error.message,
           details: error.details,
+          statusCode: error.status,
           fullError: error
         });
+        console.error('⚠️  This usually means RLS policy is blocking access');
+        console.error('    - Check if student_id matches auth.uid()');
+        console.error('    - Check if RLS policies are enabled');
         setSubmittedLogs([]);
       } else {
         console.log('✅ SUCCESS - Found', data?.length || 0, 'submissions');
+        if (data && data.length > 0) {
+          console.log('📝 Sample submission:', data[0]);
+        }
         setSubmittedLogs(data || []);
       }
     } catch (err) {
