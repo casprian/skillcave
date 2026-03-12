@@ -98,7 +98,32 @@ export default function StudentDashboard() {
         }
 
         if (leaderRes) {
-          if (leaderRes.performers) setTopPerformers(leaderRes.performers);
+          if (leaderRes.performers && leaderRes.performers.length > 0) {
+            // Fetch profile names for the performers using email
+            const emails = leaderRes.performers
+              .map((p: any) => p.email)
+              .filter((email: string) => email);
+            
+            if (emails.length > 0) {
+              const { data: profiles } = await supabase
+                .from('profiles')
+                .select('email, name')
+                .in('email', emails);
+
+              const profileMap = profiles?.reduce((acc: any, p: any) => {
+                acc[p.email] = p.name;
+                return acc;
+              }, {}) || {};
+
+              const enriched = leaderRes.performers.map((entry: any) => ({
+                ...entry,
+                name: profileMap[entry.email] || entry.name || (entry.email ? entry.email.split('@')[0] : 'Student'),
+              }));
+              setTopPerformers(enriched);
+            } else {
+              setTopPerformers(leaderRes.performers);
+            }
+          }
           if (leaderRes.userRank) setUserRank(leaderRes.userRank);
           if (leaderRes.submissions) setProgressLogs(leaderRes.submissions);
         }
@@ -148,6 +173,31 @@ export default function StudentDashboard() {
         return;
       }
 
+      // Fetch profile names for the performers
+      let enrichedLeaderboard = leaderboard || [];
+      if (enrichedLeaderboard.length > 0) {
+        const emails = enrichedLeaderboard
+          .map((p: any) => p.email)
+          .filter((email: string) => email); // Filter out null/undefined emails
+        
+        if (emails.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('email, name')
+            .in('email', emails);
+
+          const profileMap = profiles?.reduce((acc: any, p: any) => {
+            acc[p.email] = p.name;
+            return acc;
+          }, {}) || {};
+
+          enrichedLeaderboard = enrichedLeaderboard.map((entry: any) => ({
+            ...entry,
+            name: profileMap[entry.email] || entry.name || (entry.email ? entry.email.split('@')[0] : 'Student'),
+          }));
+        }
+      }
+
       // Fetch user's current month rank
       const { data: userRankData, error: rankError } = await supabase
         .from('current_month_leaderboard')
@@ -172,8 +222,8 @@ export default function StudentDashboard() {
         }
       }
 
-      if (leaderboard) {
-        setTopPerformers(leaderboard);
+      if (enrichedLeaderboard && enrichedLeaderboard.length > 0) {
+        setTopPerformers(enrichedLeaderboard);
       }
 
       // Fetch progress logs with tutor information
@@ -268,11 +318,7 @@ export default function StudentDashboard() {
     { id: 2, title: 'Learning Log', icon: '📝', color: '#06b6d4' },
   ];
 
-  const profileStats = [
-    { label: 'Learning Streak', value: `${calculateLearningStreak()} days`, icon: '🔥', color: '#f59e0b' },
-    { label: 'Skills', value: calculateUniqueSkills(), icon: '🎓', color: '#10b981' },
-    { label: 'Points', value: userRank?.total_points || '0', icon: '⭐', color: '#f97316' },
-  ];
+  const profileStats = [];
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -290,41 +336,50 @@ export default function StudentDashboard() {
 
   const renderOverviewTab = () => (
     <View>
-      {/* Hero Stats */}
-      <View style={styles.statsSection}>
-        {profileStats.map((stat, idx) => (
-          <View key={idx} style={styles.miniStatCard}>
-            <Text style={styles.miniStatIcon}>{stat.icon}</Text>
-            <Text style={styles.miniStatValue}>{stat.value}</Text>
-            <Text style={styles.miniStatLabel}>{stat.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Primary Actions */}
-      <Text style={styles.sectionTitle}>Quick Start</Text>
-      {mainActions.map((action) => (
+      {/* Professional Action Cards Section */}
+      <View style={styles.actionCardsContainer}>
+        {/* Mark Attendance Action */}
         <TouchableOpacity 
-          key={action.id} 
-          style={styles.primaryActionCard}
-          onPress={() => {
-            if (action.id === 1) {
-              router.push('/(student)/attendance');
-            } else if (action.id === 2) {
-              router.push('/(student)/learning-log');
-            }
-          }}
+          style={styles.actionCardProfessional}
+          onPress={() => router.push('/(student)/attendance')}
+          activeOpacity={0.85}
         >
-          <View style={[styles.actionIconBg, { backgroundColor: action.color + '15' }]}>
-            <Text style={styles.largeIcon}>{action.icon}</Text>
+          <View style={styles.actionCardHeader}>
+            <View style={styles.actionIconLarge_attendance}>
+              <Text style={styles.actionIconText}>✓</Text>
+            </View>
+            <View style={styles.actionCardInfo}>
+              <Text style={styles.actionCardTitleLarge}>Mark Attendance</Text>
+              <Text style={styles.actionCardSubtitle}>Track your daily presence</Text>
+            </View>
+            <Text style={styles.actionChevron}>›</Text>
           </View>
-          <View style={styles.actionContent}>
-            <Text style={styles.actionCardTitle}>{action.title}</Text>
-            <Text style={styles.actionCardDesc}>Start now</Text>
+          <View style={styles.actionCardFooter}>
+            <Text style={styles.actionCardMetric}>12/12 sessions attended</Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-      ))}
+
+        {/* Learning Log Action */}
+        <TouchableOpacity 
+          style={styles.actionCardProfessional}
+          onPress={() => router.push('/(student)/learning-log')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.actionCardHeader}>
+            <View style={styles.actionIconLarge_learning}>
+              <Text style={styles.actionIconText}>📝</Text>
+            </View>
+            <View style={styles.actionCardInfo}>
+              <Text style={styles.actionCardTitleLarge}>Log Learning</Text>
+              <Text style={styles.actionCardSubtitle}>Record your progress</Text>
+            </View>
+            <Text style={styles.actionChevron}>›</Text>
+          </View>
+          <View style={styles.actionCardFooter}>
+            <Text style={styles.actionCardMetric}>{progressLogs?.length || 0} entries this month</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
 
       {/* Top Performers */}
       <Text style={[styles.sectionTitle, { marginTop: 24 }]}>🏆 Top Performers - {currentMonth}</Text>
@@ -346,31 +401,73 @@ export default function StudentDashboard() {
         <Text style={styles.monthlyBadgeText}>📅 Monthly Competition • Fresh start each month</Text>
       </View>
 
-      <View style={styles.leaderboardCompact}>
+      {/* Leaderboard Table */}
+      <View style={styles.leaderboardTable}>
+        {/* Table Header */}
+        <View style={[styles.tableRow, styles.tableHeader]}>
+          <View style={styles.tableCell_rank}>
+            <Text style={styles.tableHeaderText}>Rank</Text>
+          </View>
+          <View style={styles.tableCell_name}>
+            <Text style={styles.tableHeaderText}>Name</Text>
+          </View>
+          <View style={styles.tableCell_submitted}>
+            <Text style={styles.tableHeaderText}>Submitted</Text>
+          </View>
+          <View style={styles.tableCell_approved}>
+            <Text style={styles.tableHeaderText}>Approved</Text>
+          </View>
+          <View style={styles.tableCell_rate}>
+            <Text style={styles.tableHeaderText}>Rate</Text>
+          </View>
+          <View style={styles.tableCell_points}>
+            <Text style={styles.tableHeaderText}>Points</Text>
+          </View>
+        </View>
+
+        {/* Table Body */}
         {topPerformers.length > 0 ? (
           topPerformers.map((entry, idx) => {
             const badges = ['👑', '🥈', '🥉'];
             const isUser = entry.student_id === user?.id;
+            const approvalRate = entry.submission_count > 0 
+              ? Math.round((entry.approved_count / entry.submission_count) * 100)
+              : 0;
             return (
-              <View key={entry.id} style={[
-                styles.leaderboardCompactItem,
-                idx !== topPerformers.length - 1 && styles.leaderboardCompactBorder
-              ]}>
-                <Text style={styles.leaderboardBadge}>{badges[idx] || '🎯'}</Text>
-                <View style={styles.leaderboardCompactInfo}>
-                  <Text style={[styles.leaderboardCompactName, isUser && styles.userHighlight]}>
-                    {entry.name || (entry.email ? entry.email.split('@')[0] : 'Student')} {isUser && '(You)'}
-                  </Text>
-                  <Text style={styles.leaderboardCompactStats}>
-                    {entry.total_points} pts • {entry.approved_count}/{entry.submission_count} approved
+              <View 
+                key={entry.id} 
+                style={[
+                  styles.tableRow,
+                  isUser && styles.tableRowHighlight,
+                  idx !== topPerformers.length - 1 && styles.tableRowBorder
+                ]}
+              >
+                <View style={styles.tableCell_rank}>
+                  <Text style={styles.tableCellText}>{badges[idx]} #{idx + 1}</Text>
+                </View>
+                <View style={styles.tableCell_name}>
+                  <Text style={[styles.tableCellText, styles.tableCellNameText, isUser && styles.tableUserName]}>
+                    {entry.name || (entry.email ? entry.email.split('@')[0] : 'Student')}
+                    {isUser && <Text style={styles.userLabel}> (You)</Text>}
                   </Text>
                 </View>
-                {isUser && <View style={styles.youIndicator} />}
+                <View style={styles.tableCell_submitted}>
+                  <Text style={[styles.tableCellText, styles.tableCellBadge]}>{entry.submission_count}</Text>
+                </View>
+                <View style={styles.tableCell_approved}>
+                  <Text style={[styles.tableCellText, styles.tableCellBadgeGreen]}>{entry.approved_count}</Text>
+                </View>
+                <View style={styles.tableCell_rate}>
+                  <Text style={[styles.tableCellText, styles.tableCellBadgeBlue]}>{approvalRate}%</Text>
+                </View>
+                <View style={styles.tableCell_points}>
+                  <Text style={[styles.tableCellText, styles.tableCellPointsText]}>{entry.total_points}</Text>
+                </View>
               </View>
             );
           })
         ) : (
-          <View style={styles.leaderboardCompactItem}>
+          <View style={styles.tableRow}>
             <Text style={styles.emptyLeaderboardText}>Loading leaderboard...</Text>
           </View>
         )}
@@ -577,7 +674,7 @@ export default function StudentDashboard() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Image 
-            source={require('../../assets/images/logo.jpeg')}
+            source={require('../../assets/images/icon.png')}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -588,19 +685,54 @@ export default function StudentDashboard() {
         </TouchableOpacity>
       </View>
 
-      {/* Hero Section */}
-      <View style={styles.heroSection}>
-        <View style={styles.heroContent}>
-          <Text style={styles.heroGreeting}>Welcome, {profile?.name?.split(' ')[0] || 'Student'}! 👋</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>
+      {/* Premium Header Section */}
+      <View style={styles.premiumHeader}>
+        {/* Top Row: Greeting + Role Badge */}
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerGreeting}>Welcome, {profile?.name?.split(' ')[0] || 'Student'}! 👋</Text>
+            <Text style={styles.headerSubtext}>Keep building momentum</Text>
+          </View>
+          <View style={styles.roleBadgeNew}>
+            <Text style={styles.roleBadgeTextNew}>
               {profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Student'}
             </Text>
           </View>
         </View>
-        <View style={styles.heroProgressRing}>
-          <Text style={styles.progressValue}>{calculateApprovalPercentage()}%</Text>
-          <Text style={styles.progressLabel}>Approved</Text>
+
+        {/* Key Metrics - 4 Column Header */}
+        <View style={styles.statsCardIntegrated}>
+          <View style={styles.statItemSmall}>
+            <Text style={styles.statIconSmall}>✅</Text>
+            <View style={styles.statTextContainer}>
+              <Text style={styles.statValueSmall}>{calculateApprovalPercentage()}%</Text>
+              <Text style={styles.statLabelSmall}>Approved</Text>
+            </View>
+          </View>
+          <View style={styles.statDividerSmall} />
+          <View style={styles.statItemSmall}>
+            <Text style={styles.statIconSmall}>📝</Text>
+            <View style={styles.statTextContainer}>
+              <Text style={styles.statValueSmall}>{progressLogs?.length || 0}</Text>
+              <Text style={styles.statLabelSmall}>Submitted</Text>
+            </View>
+          </View>
+          <View style={styles.statDividerSmall} />
+          <View style={styles.statItemSmall}>
+            <Text style={styles.statIconSmall}>🔥</Text>
+            <View style={styles.statTextContainer}>
+              <Text style={styles.statValueSmall}>{calculateLearningStreak()}</Text>
+              <Text style={styles.statLabelSmall}>Streak</Text>
+            </View>
+          </View>
+          <View style={styles.statDividerSmall} />
+          <View style={styles.statItemSmall}>
+            <Text style={styles.statIconSmall}>🎓</Text>
+            <View style={styles.statTextContainer}>
+              <Text style={styles.statValueSmall}>{calculateUniqueSkills()}</Text>
+              <Text style={styles.statLabelSmall}>Skills</Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -611,7 +743,7 @@ export default function StudentDashboard() {
           onPress={() => setActiveTab('overview')}
         >
           <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
-            Overview
+            Actions
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
@@ -736,6 +868,163 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 2,
+  },
+  // Premium Header Styles (World-Class UX)
+  premiumHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
+    marginBottom: 16,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerGreeting: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  headerSubtext: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  roleBadgeNew: {
+    backgroundColor: '#0369a1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginLeft: 12,
+  },
+  roleBadgeTextNew: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statsCardIntegrated: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  statItemSmall: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statIconSmall: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  statTextContainer: {
+    justifyContent: 'center',
+  },
+  statValueSmall: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0c2d4c',
+  },
+  statLabelSmall: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  statDividerSmall: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#cbd5e1',
+    marginHorizontal: 12,
+  },
+  // Professional Action Card Styles
+  actionCardsContainer: {
+    marginHorizontal: 0,
+    marginBottom: 24,
+  },
+  actionCardProfessional: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  actionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  actionIconLarge_attendance: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#dbeafe',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  actionIconLarge_learning: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#ecfdf5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  actionIconText: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  actionCardInfo: {
+    flex: 1,
+  },
+  actionCardTitleLarge: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0c2d4c',
+    marginBottom: 2,
+  },
+  actionCardSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  actionChevron: {
+    fontSize: 24,
+    color: '#cbd5e1',
+    fontWeight: '300',
+    marginLeft: 8,
+  },
+  actionCardFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#f9fafc',
+  },
+  actionCardMetric: {
+    fontSize: 12,
+    color: '#0369a1',
+    fontWeight: '600',
   },
   tabContainer: {
     flexDirection: 'row',
@@ -1322,5 +1611,108 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  // Table Styles for Leaderboard
+  leaderboardTable: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 16,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  tableHeader: {
+    backgroundColor: '#0369a1',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  tableRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  tableRowHighlight: {
+    backgroundColor: '#f0f9ff',
+  },
+  tableCell_rank: {
+    width: 50,
+  },
+  tableCell_name: {
+    flex: 2.5,
+  },
+  tableCell_submitted: {
+    flex: 1.2,
+    alignItems: 'center',
+  },
+  tableCell_approved: {
+    flex: 1.2,
+    alignItems: 'center',
+  },
+  tableCell_rate: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  tableCell_points: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  tableHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  tableCellText: {
+    fontSize: 13,
+    color: '#0c2d4c',
+    fontWeight: '500',
+  },
+  tableCellNameText: {
+    fontWeight: '600',
+  },
+  tableUserName: {
+    color: '#0369a1',
+    fontWeight: '700',
+  },
+  userLabel: {
+    fontSize: 11,
+    color: '#0369a1',
+    fontWeight: '600',
+  },
+  tableCellBadge: {
+    backgroundColor: '#dbeafe',
+    color: '#0369a1',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    overflow: 'hidden',
+    fontWeight: '600',
+  },
+  tableCellBadgeGreen: {
+    backgroundColor: '#d1fae5',
+    color: '#059669',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    overflow: 'hidden',
+    fontWeight: '600',
+  },
+  tableCellBadgeBlue: {
+    backgroundColor: '#ede9fe',
+    color: '#7c3aed',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    overflow: 'hidden',
+    fontWeight: '600',
+  },
+  tableCellPointsText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0369a1',
   },
 });

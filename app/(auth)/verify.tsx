@@ -76,7 +76,7 @@ export default function VerifyScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.logoContainer}>
         <Image 
-          source={require('../../assets/images/logo.jpeg')}
+          source={require('../../assets/images/icon.png')}
           style={styles.logo}
           resizeMode="contain"
         />

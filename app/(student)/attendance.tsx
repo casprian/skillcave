@@ -30,6 +30,8 @@ export default function AttendancePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [stats, setStats] = useState({ present: 0, absent: 0, late: 0, total: 0, rate: 0 });
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showErrorModal, setShowErrorModal] = useState(false);
 
   // Initialize user session and load attendance
   useEffect(() => {
@@ -114,10 +116,37 @@ export default function AttendancePage() {
     return Math.max(0, hours);
   };
 
+  // Validate selected date - cannot be in future
+  const validateDateSubmission = (date: Date): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDateOnly = new Date(date);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+
+    if (selectedDateOnly > today) {
+      const formattedDate = selectedDateOnly.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      setErrorMessage(`❌ Future Date Not Allowed\n\nYou cannot log attendance for ${formattedDate}.\n\nPlease select today or an earlier date.`);
+      setShowErrorModal(true);
+      return false;
+    }
+
+    return true;
+  };
+
   // Quick logging - same day attendance
   const handleQuickLog = async () => {
     if (!userId) {
       alert('User not logged in');
+      return;
+    }
+
+    // Validate date is not in future
+    if (!validateDateSubmission(selectedDate)) {
       return;
     }
 
@@ -170,6 +199,11 @@ export default function AttendancePage() {
   const handleAdvancedLog = async () => {
     if (!userId) {
       alert('User not logged in');
+      return;
+    }
+
+    // Validate date is not in future
+    if (!validateDateSubmission(selectedDate)) {
       return;
     }
 
@@ -323,30 +357,6 @@ export default function AttendancePage() {
         </View>
 
         <View style={styles.content}>
-          {/* Quick Stats */}
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{stats.present}</Text>
-              <Text style={styles.statLabel}>Present</Text>
-              <View style={[styles.statDot, { backgroundColor: '#10b981' }]} />
-            </View>
-            <View style={styles.statCard}>
-              <Text style={[styles.statValue, { color: '#ef4444' }]}>{stats.absent}</Text>
-              <Text style={styles.statLabel}>Absent</Text>
-              <View style={[styles.statDot, { backgroundColor: '#ef4444' }]} />
-            </View>
-            <View style={styles.statCard}>
-              <Text style={[styles.statValue, { color: '#f59e0b' }]}>{stats.late}</Text>
-              <Text style={styles.statLabel}>Late</Text>
-              <View style={[styles.statDot, { backgroundColor: '#f59e0b' }]} />
-            </View>
-            <View style={styles.statCard}>
-              <Text style={[styles.statValue, { color: '#0369a1' }]}>{stats.rate}%</Text>
-              <Text style={styles.statLabel}>Rate</Text>
-              <View style={[styles.statDot, { backgroundColor: '#0369a1' }]} />
-            </View>
-          </View>
-
           {/* Date Selector */}
           <View style={styles.dateSelector}>
             <Text style={styles.dateLabel}>Logging for:</Text>
@@ -408,26 +418,34 @@ export default function AttendancePage() {
               style={[styles.modeButton, logMode === 'quick' && styles.modeButtonActive]}
               onPress={() => setLogMode('quick')}
             >
-              <Text style={[styles.modeIcon, logMode === 'quick' && { color: 'white' }]}>⚡</Text>
-              <Text style={[styles.modeText, logMode === 'quick' && styles.modeTextActive]}>
-                Quick Log
-              </Text>
-              <Text style={[styles.modeDesc, logMode === 'quick' && styles.modeDescActive]}>
-                Fast entry
-              </Text>
+              <View style={styles.modeButtonContent}>
+                <Text style={[styles.modeIcon, logMode === 'quick' && { color: 'white' }]}>⚡</Text>
+                <View style={styles.modeTextWrapper}>
+                  <Text style={[styles.modeText, logMode === 'quick' && styles.modeTextActive]}>
+                    Quick Log
+                  </Text>
+                  <Text style={[styles.modeDesc, logMode === 'quick' && styles.modeDescActive]}>
+                    Just your hours
+                  </Text>
+                </View>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.modeButton, logMode === 'advanced' && styles.modeButtonActive]}
               onPress={() => setLogMode('advanced')}
             >
-              <Text style={[styles.modeIcon, logMode === 'advanced' && { color: 'white' }]}>🎯</Text>
-              <Text style={[styles.modeText, logMode === 'advanced' && styles.modeTextActive]}>
-                Detailed Log
-              </Text>
-              <Text style={[styles.modeDesc, logMode === 'advanced' && styles.modeDescActive]}>
-                Full details
-              </Text>
+              <View style={styles.modeButtonContent}>
+                <Text style={[styles.modeIcon, logMode === 'advanced' && { color: 'white' }]}>📝</Text>
+                <View style={styles.modeTextWrapper}>
+                  <Text style={[styles.modeText, logMode === 'advanced' && styles.modeTextActive]}>
+                    Detailed Log
+                  </Text>
+                  <Text style={[styles.modeDesc, logMode === 'advanced' && styles.modeDescActive]}>
+                    With project & task info
+                  </Text>
+                </View>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -654,46 +672,127 @@ export default function AttendancePage() {
             </View>
           )}
 
-          {/* Recent Logs */}
-          <Text style={styles.recentTitle}>📋 Recent Logs</Text>
-          {attendanceRecords.length > 0 ? (
-            <View style={styles.logsContainer}>
-              {attendanceRecords.slice(0, 10).map((record, idx) => (
-                <View key={idx} style={styles.logEntry}>
-                  <View style={styles.logEntryLeft}>
-                    <Text style={styles.logDate}>{formatDate(record.attendance_date)}</Text>
-                    {record.attendance_type === 'detailed' && (
-                      <Text style={styles.logProject}>{record.project_name || 'General'}</Text>
-                    )}
-                    {record.login_time && (
-                      <Text style={styles.logTime}>
-                        {record.login_time} - {record.logout_time}
+          {/* Attendance Calendar - Read Only Status View */}
+          <Text style={styles.recentTitle}>📋 Attendance Calendar</Text>
+          
+          {/* Calendar Month Header */}
+          <View style={styles.calendarStatusHeader}>
+            <TouchableOpacity onPress={() => {
+              const newDate = new Date(currentMonth);
+              newDate.setMonth(newDate.getMonth() - 1);
+              setCurrentMonth(newDate);
+            }}>
+              <Text style={styles.calendarNav}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.calendarStatusMonth}>
+              {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+            <TouchableOpacity onPress={() => {
+              const newDate = new Date(currentMonth);
+              newDate.setMonth(newDate.getMonth() + 1);
+              setCurrentMonth(newDate);
+            }}>
+              <Text style={styles.calendarNav}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Weekday Labels */}
+          <View style={styles.calendarWeekdaysStatus}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <Text key={day} style={styles.weekdayTextStatus}>{day}</Text>
+            ))}
+          </View>
+
+          {/* Calendar Grid with Status Indicators */}
+          <View style={styles.calendarGridStatus}>
+            {(() => {
+              const daysInMonth = getDaysInMonth(currentMonth);
+              const firstDay = getFirstDayOfMonth(currentMonth);
+              const days = [];
+              const attendanceMap = new Map(
+                attendanceRecords.map(record => [record.attendance_date, record.status])
+              );
+
+              // Empty cells for days before month starts
+              for (let i = 0; i < firstDay; i++) {
+                days.push(<View key={`empty-${i}`} style={styles.calendarDayStatus} />);
+              }
+
+              // Days of month with status coloring
+              for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                const dateStr = date.toISOString().split('T')[0];
+                const status = attendanceMap.get(dateStr);
+                const isToday = new Date().toDateString() === date.toDateString();
+
+                let dayColor = '#f1f5f9';
+                let textColor = '#94a3b8';
+                let borderColor = 'transparent';
+
+                if (status === 'present') {
+                  dayColor = '#dcfce7';
+                  textColor = '#15803d';
+                  borderColor = '#22c55e';
+                } else if (status === 'absent') {
+                  dayColor = '#fee2e2';
+                  textColor = '#991b1b';
+                  borderColor = '#ef4444';
+                }
+
+                if (isToday) {
+                  borderColor = '#0369a1';
+                }
+
+                days.push(
+                  <View
+                    key={day}
+                    style={[
+                      styles.calendarDayStatus,
+                      {
+                        backgroundColor: dayColor,
+                        borderColor: borderColor,
+                        borderWidth: borderColor !== 'transparent' ? 2 : 0,
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.calendarDayTextStatus, { color: textColor }]}>
+                      {day}
+                    </Text>
+                    {status && (
+                      <Text style={styles.calendarDayStatusIcon}>
+                        {status === 'present' ? '✓' : '✕'}
                       </Text>
                     )}
                   </View>
-                  <View style={styles.logEntryRight}>
-                    <View style={styles.logHoursBadge}>
-                      <Text style={styles.logHours}>{record.hours}h</Text>
-                    </View>
-                    <View style={[
-                      styles.logTypeBadge,
-                      record.attendance_type === 'detailed' ? styles.logTypeDetailed : styles.logTypeQuick
-                    ]}>
-                      <Text style={styles.logTypeText}>
-                        {record.attendance_type === 'detailed' ? '🎯' : '⚡'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))}
+                );
+              }
+
+              // Fill remaining cells to complete the grid (6 rows x 7 columns = 42 cells)
+              const totalCells = firstDay + daysInMonth;
+              const remainingCells = Math.ceil(totalCells / 7) * 7 - totalCells;
+              for (let i = 0; i < remainingCells; i++) {
+                days.push(<View key={`end-empty-${i}`} style={styles.calendarDayStatus} />);
+              }
+
+              return days;
+            })()}
+          </View>
+
+          {/* Calendar Legend */}
+          <View style={styles.calendarLegend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#dcfce7', borderColor: '#22c55e', borderWidth: 2 }]} />
+              <Text style={styles.legendLabel}>Present</Text>
             </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📭</Text>
-              <Text style={styles.emptyText}>No logs yet</Text>
-              <Text style={styles.emptySubtext}>Start logging your work to track attendance</Text>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#fee2e2', borderColor: '#ef4444', borderWidth: 2 }]} />
+              <Text style={styles.legendLabel}>Absent</Text>
             </View>
-          )}
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#f1f5f9', borderColor: '#0369a1', borderWidth: 2 }]} />
+              <Text style={styles.legendLabel}>Today</Text>
+            </View>
+          </View>
         </View>
       </ScrollView>
 
@@ -711,6 +810,30 @@ export default function AttendancePage() {
             </View>
             <Text style={styles.successTitle}>Logged Successfully!</Text>
             <Text style={styles.successMessage}>{successMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error Modal - Future Date Validation */}
+      <Modal
+        transparent={true}
+        animationType="fade"
+        visible={showErrorModal}
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.errorModal}>
+            <View style={styles.errorIconContainer}>
+              <Text style={styles.errorIcon}>❌</Text>
+            </View>
+            <Text style={styles.errorTitle}>Cannot Log Future Attendance</Text>
+            <Text style={styles.errorMessage}>{errorMessage}</Text>
+            <TouchableOpacity 
+              style={styles.errorCloseButton}
+              onPress={() => setShowErrorModal(false)}
+            >
+              <Text style={styles.errorCloseButtonText}>Understood</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -947,6 +1070,103 @@ const styles = StyleSheet.create({
   },
   modeDescActive: {
     color: 'rgba(255, 255, 255, 0.9)',
+  },
+  // Mode Button Content Styles
+  modeButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modeTextWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  // Calendar Status View Styles
+  calendarStatusHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  calendarStatusMonth: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0c2d4c',
+  },
+  calendarWeekdaysStatus: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  weekdayTextStatus: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    width: '14.28%',
+    textAlign: 'center',
+  },
+  calendarGridStatus: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+    gap: 1,
+    paddingHorizontal: 0,
+    justifyContent: 'space-between',
+  },
+  calendarDayStatus: {
+    flex: 1,
+    minWidth: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 999,
+    backgroundColor: '#f1f5f9',
+    position: 'relative',
+    borderWidth: 0,
+  },
+  calendarDayTextStatus: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94a3b8',
+  },
+  calendarDayStatusIcon: {
+    position: 'absolute',
+    fontSize: 7,
+    fontWeight: '700',
+    top: -1,
+    right: -1,
+  },
+  calendarLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f9fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 999,
+  },
+  legendLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
   },
   formCard: {
     backgroundColor: 'white',
@@ -1278,5 +1498,58 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  // Error Modal Styles
+  errorModal: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    minWidth: 280,
+  },
+  errorIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#fee2e2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  errorIcon: {
+    fontSize: 32,
+    fontWeight: '800',
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#7f1d1d',
+    marginBottom: 12,
+  },
+  errorMessage: {
+    fontSize: 13,
+    color: '#4b5563',
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  errorCloseButton: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 140,
+    alignItems: 'center',
+  },
+  errorCloseButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'white',
   },
 });

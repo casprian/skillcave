@@ -24,7 +24,7 @@ export default function AdminDashboard() {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Image 
-          source={require('../../assets/images/logo.jpeg')}
+          source={require('../../assets/images/icon.png')}
           style={styles.headerLogo}
           resizeMode="contain"
         />

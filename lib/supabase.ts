@@ -5,19 +5,40 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 console.log('🔐 [Supabase] Initializing Supabase client');
 
-// Create a NO-OP storage implementation that prevents Supabase from trying to use AsyncStorage
-// This avoids the "native module is null" error completely
-const noopStorage = {
-  getItem: async (key: string) => {
-    console.log(`📦 [Supabase] getItem called for key: ${key} (returning null - no persistence)`);
-    return null;
-  },
-  setItem: async (key: string, value: string) => {
-    console.log(`📦 [Supabase] setItem called for key: ${key} (discarding - no persistence)`);
-  },
-  removeItem: async (key: string) => {
-    console.log(`📦 [Supabase] removeItem called for key: ${key}`);
-  },
+// In-memory storage that persists during the app session
+// Sessions are kept in RAM and survive app navigation and screen changes
+// They are cleared only when the app is fully closed
+const memoryStorage: { [key: string]: string } = {};
+
+const createInMemoryStorage = () => {
+  return {
+    getItem: async (key: string) => {
+      try {
+        const value = memoryStorage[key] || null;
+        console.log(`📦 [SessionStorage] Retrieved ${key}: ${value ? '✅ found' : '⭕ empty'}`);
+        return value;
+      } catch (error) {
+        console.error(`❌ [SessionStorage] Error getting ${key}:`, error);
+        return null;
+      }
+    },
+    setItem: async (key: string, value: string) => {
+      try {
+        memoryStorage[key] = value;
+        console.log(`💾 [SessionStorage] Saved ${key} (session in memory)`);
+      } catch (error) {
+        console.error(`❌ [SessionStorage] Error saving ${key}:`, error);
+      }
+    },
+    removeItem: async (key: string) => {
+      try {
+        delete memoryStorage[key];
+        console.log(`🗑️ [SessionStorage] Removed ${key}`);
+      } catch (error) {
+        console.error(`❌ [SessionStorage] Error removing ${key}:`, error);
+      }
+    },
+  };
 };
 
 const createSupabaseClient = () => {
@@ -26,18 +47,19 @@ const createSupabaseClient = () => {
     return null;
   }
 
-  console.log('📡 [Supabase] Creating client with no-op storage (prevents AsyncStorage access)');
+  console.log('📡 [Supabase] Creating client with in-memory session storage');
 
   try {
+    const inMemoryStorage = createInMemoryStorage();
     const client = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
-        persistSession: false, // CRITICAL: Disable persistence to skip storage entirely
+        persistSession: true, // ✅ ENABLED: Keep session in memory while app is open
         detectSessionInUrl: false,
-        storage: noopStorage, // Use no-op storage instead of AsyncStorage
+        storage: inMemoryStorage, // ✅ Use in-memory storage (survives navigation)
       },
     });
-    console.log('✅ [Supabase] Client created successfully');
+    console.log('✅ [Supabase] Client created successfully - sessions stored in memory');
     return client;
   } catch (err: any) {
     console.error('❌ [Supabase] Failed to create client:', err?.message);

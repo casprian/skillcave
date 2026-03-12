@@ -173,7 +173,7 @@ export default function TutorDashboard() {
       <View style={styles.header}>
         <View style={styles.logoHeader}>
           <Image 
-            source={require('../../assets/images/logo.jpeg')}
+            source={require('../../assets/images/icon.png')}
             style={styles.logoSmall}
             resizeMode="contain"
           />

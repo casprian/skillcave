@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'expo-router';
@@ -173,9 +173,11 @@ export default function EnrollScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.logoContainer}>
-        <View style={styles.logoPlaceholder}>
-          <Text style={styles.logoText}>🏫</Text>
-        </View>
+        <Image
+          source={require('../../assets/images/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </View>
 
       <Text style={styles.title}>SkillCave</Text>
@@ -285,20 +287,9 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     marginTop: 20,
   },
-  logoPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 16,
-    backgroundColor: '#0369a1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoText: {
-    fontSize: 50,
-  },
   logo: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     borderRadius: 16,
   },
   title: {
