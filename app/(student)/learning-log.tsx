@@ -10,14 +10,15 @@ interface Tutor {
   auth_id?: string | null;
 }
 
-// Helper function to get tutor's auth UUID from email
-async function getTutorAuthId(email: string): Promise<string | null> {
+// Helper function to get tutor's auth UUID from tutor ID
+// Since profiles no longer has email, we now use the ID directly
+// auth_id should be populated when tutors are fetched
+async function getTutorAuthId(tutorId: string): Promise<string | null> {
   try {
     const { data, error } = await supabase
       .from('profiles')
       .select('auth_id')
-      .eq('email', email)
-      .eq('role', 'tutor')
+      .eq('id', tutorId)
       .maybeSingle();
     
     if (error) {
@@ -75,7 +76,7 @@ export default function LearningLogPage() {
           const { data: profileData } = await supabase
             .from('profiles')
             .select('*')
-            .eq('email', authUser.email)
+            .eq('id', authUser.id)
             .maybeSingle();
 
           if (profileData) {
@@ -86,7 +87,7 @@ export default function LearningLogPage() {
           console.log('Attempting to fetch tutors...');
           const { data: tutorsData, error: tutorsError } = await supabase
             .from('profiles')
-            .select('id, email, name, auth_id')
+            .select('id, auth_id')
             .eq('role', 'tutor');
 
           console.log('Tutors query result:', { tutorsData, tutorsError, length: tutorsData?.length });
@@ -95,8 +96,26 @@ export default function LearningLogPage() {
             console.error('Error fetching tutors:', tutorsError);
             setTutors([]);
           } else if (tutorsData && tutorsData.length > 0) {
-            console.log('Setting tutors:', tutorsData);
-            setTutors(tutorsData);
+            // Fetch auth user data for names
+            const tutorIds = tutorsData.map((t: any) => t.id);
+            const { data: usersData } = await supabase.auth.admin.listUsers();
+            
+            const userMap = (usersData || []).reduce((acc: any, user: any) => {
+              acc[user.id] = {
+                name: user.user_metadata?.name || user.email?.split('@')[0] || 'Tutor',
+                email: user.email || 'Unknown',
+              };
+              return acc;
+            }, {});
+
+            const enrichedTutors = tutorsData.map((tutor: any) => ({
+              ...tutor,
+              name: userMap[tutor.id]?.name || 'Tutor',
+              email: userMap[tutor.id]?.email || 'Unknown',
+            }));
+
+            console.log('Setting tutors:', enrichedTutors);
+            setTutors(enrichedTutors);
           } else {
             console.log('No tutors found in database');
             setTutors([]);
@@ -176,14 +195,21 @@ export default function LearningLogPage() {
 
     setIsSubmitting(true);
     try {
-      // For submitted_to_tutor, use auth_id (UUID) if available, otherwise use email for matching
+      // Validate user is authenticated
+      if (!user?.id) {
+        alert('User not authenticated. Please log in again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // For submitted_to_tutor, use auth_id (UUID) if available, otherwise fetch it
       let tutorUUID: string | null = null;
       if (submitType === 'specific' && selectedTutor) {
-        tutorUUID = selectedTutor.auth_id || await getTutorAuthId(selectedTutor.email);
+        tutorUUID = selectedTutor.auth_id || await getTutorAuthId(selectedTutor.id);
       }
       
       const submissionData = {
-        student_id: user?.id?.toString(),
+        student_id: user.id, // Use user.id directly (it's already a UUID)
         title: submissionTitle,
         topic: selectedTopic,
         description: description,

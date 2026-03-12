@@ -24,7 +24,7 @@ export default function TutorDashboard() {
           const { data: profileData, error } = await supabase
             .from('profiles')
             .select('*')
-            .eq('email', authUser.email)
+            .eq('id', authUser.id)
             .maybeSingle();
 
           if (error && error.code !== 'PGRST116') {
@@ -59,7 +59,20 @@ export default function TutorDashboard() {
       if (error) {
         console.error('Error fetching assignments:', error);
       } else {
-        setAssignments(data || []);
+        // Enrich assignments with student names from auth.users
+        const { data: usersData } = await supabase.auth.admin.listUsers();
+        
+        const userMap = (usersData || []).reduce((acc: any, user: any) => {
+          acc[user.id] = user.user_metadata?.name || user.email?.split('@')[0] || 'Student';
+          return acc;
+        }, {});
+
+        const enrichedAssignments = (data || []).map((assignment: any) => ({
+          ...assignment,
+          student_name: userMap[assignment.student_id] || 'Student',
+        }));
+
+        setAssignments(enrichedAssignments);
       }
     } catch (err) {
       console.error('Error:', err);

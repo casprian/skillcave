@@ -56,7 +56,7 @@ export default function LoginScreen() {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('role')
-          .eq('email', data.user.email)
+          .eq('id', data.user.id)
           .maybeSingle();
         
         if (profileError && profileError.code !== 'PGRST116') {
@@ -78,8 +78,18 @@ export default function LoginScreen() {
         
         // Wait a moment for session to be established
         setTimeout(() => {
-          const route = profileData?.role === 'tutor' ? '/(tutor)' : '/(student)';
-          console.log('🔄 Navigating to dashboard:', route);
+          let route: '/(super_admin)' | '/(admin)' | '/(tutor)' | '/(student)' = '/(student)';
+          const userRole = profileData?.role;
+          
+          if (userRole === 'super_admin') {
+            route = '/(super_admin)';
+          } else if (userRole === 'organization_admin') {
+            route = '/(admin)';
+          } else if (userRole === 'tutor' || userRole === 'management') {
+            route = '/(tutor)';
+          }
+          
+          console.log('🔄 Navigating to dashboard:', route, '(role:', userRole, ')');
           router.replace(route);
         }, 500);
       } else {

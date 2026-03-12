@@ -118,16 +118,29 @@ export default function EnrollScreen() {
         // Create profile in database
         try {
           console.log('📝 Creating profile for user...');
+          
+          // First update auth user metadata with name and phone
+          const { error: updateError } = await supabase.auth.admin.updateUserById(authData.user.id, {
+            user_metadata: { 
+              name: name.trim(),
+              phone: phone.trim(),
+            }
+          });
+
+          if (updateError) {
+            console.error('❌ Auth metadata update error:', updateError);
+          }
+
+          // Then create or update minimal profile record (email and name are in auth.users now)
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .insert([
+            .upsert(
               {
-                email: email.toLowerCase(),
-                name: name.trim(),
-                phone: phone.trim(),
+                id: authData.user.id,
                 role: role,
-              }
-            ])
+              },
+              { onConflict: 'id' }
+            )
             .select();
 
           if (profileError) {
@@ -243,6 +256,7 @@ export default function EnrollScreen() {
               <Picker.Item label="Tutor" value="tutor" />
               <Picker.Item label="Management" value="management" />
               <Picker.Item label="Admin" value="admin" />
+              <Picker.Item label="Super Admin" value="super_admin" />
             </Picker>
           </View>
         </View>

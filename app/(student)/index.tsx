@@ -49,7 +49,7 @@ export default function StudentDashboard() {
           supabase
             .from('profiles')
             .select('*')
-            .eq('email', authUser.email)
+            .eq('id', authUser.id)
             .maybeSingle(),
           (async () => {
             try {
@@ -105,19 +105,16 @@ export default function StudentDashboard() {
               .filter((email: string) => email);
             
             if (emails.length > 0) {
-              const { data: profiles } = await supabase
-                .from('profiles')
-                .select('email, name')
-                .in('email', emails);
+              const { data: usersData } = await supabase.auth.admin.listUsers();
 
-              const profileMap = profiles?.reduce((acc: any, p: any) => {
-                acc[p.email] = p.name;
+              const userMap = (usersData || []).reduce((acc: any, user: any) => {
+                acc[user.email] = user.user_metadata?.name || user.email?.split('@')[0] || 'Student';
                 return acc;
-              }, {}) || {};
+              }, {});
 
               const enriched = leaderRes.performers.map((entry: any) => ({
                 ...entry,
-                name: profileMap[entry.email] || entry.name || (entry.email ? entry.email.split('@')[0] : 'Student'),
+                name: userMap[entry.email] || entry.name || (entry.email ? entry.email.split('@')[0] : 'Student'),
               }));
               setTopPerformers(enriched);
             } else {
@@ -181,19 +178,16 @@ export default function StudentDashboard() {
           .filter((email: string) => email); // Filter out null/undefined emails
         
         if (emails.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('email, name')
-            .in('email', emails);
+          const { data: usersData } = await supabase.auth.admin.listUsers();
 
-          const profileMap = profiles?.reduce((acc: any, p: any) => {
-            acc[p.email] = p.name;
+          const userMap = (usersData || []).reduce((acc: any, user: any) => {
+            acc[user.email] = user.user_metadata?.name || user.email?.split('@')[0] || 'Student';
             return acc;
-          }, {}) || {};
+          }, {});
 
           enrichedLeaderboard = enrichedLeaderboard.map((entry: any) => ({
             ...entry,
-            name: profileMap[entry.email] || entry.name || (entry.email ? entry.email.split('@')[0] : 'Student'),
+            name: userMap[entry.email] || entry.name || (entry.email ? entry.email.split('@')[0] : 'Student'),
           }));
         }
       }
@@ -495,7 +489,7 @@ export default function StudentDashboard() {
         </View>
         <View style={styles.profileRow}>
           <Text style={styles.profileLabel}>Name</Text>
-          <Text style={styles.profileValue}>{profile?.name || 'Not set'}</Text>
+          <Text style={styles.profileValue}>{user?.user_metadata?.name || 'Not set'}</Text>
         </View>
         <View style={styles.profileRow}>
           <Text style={styles.profileLabel}>Phone</Text>
@@ -690,7 +684,7 @@ export default function StudentDashboard() {
         {/* Top Row: Greeting + Role Badge */}
         <View style={styles.headerTopRow}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerGreeting}>Welcome, {profile?.name?.split(' ')[0] || 'Student'}! 👋</Text>
+            <Text style={styles.headerGreeting}>Welcome, {user?.user_metadata?.name?.split(' ')[0] || 'Student'}! 👋</Text>
             <Text style={styles.headerSubtext}>Keep building momentum</Text>
           </View>
           <View style={styles.roleBadgeNew}>
