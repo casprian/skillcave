@@ -189,8 +189,6 @@ CREATE OR REPLACE VIEW current_month_leaderboard AS
 SELECT
   ml.id,
   ml.student_id,
-  p.name,
-  p.email,
   ml.total_points,
   ml.submission_count,
   ml.approved_count,
@@ -201,7 +199,6 @@ SELECT
    WHERE month_year = DATE_TRUNC('month', CURRENT_DATE)::DATE
    AND total_points > 0) as total_participants
 FROM monthly_leaderboards ml
-LEFT JOIN profiles p ON ml.student_id::text = p.id::text
 WHERE ml.month_year = DATE_TRUNC('month', CURRENT_DATE)::DATE
 ORDER BY ml.total_points DESC;
 
@@ -210,8 +207,6 @@ CREATE OR REPLACE VIEW all_monthly_leaderboards AS
 SELECT
   ml.id,
   ml.student_id,
-  p.name,
-  p.email,
   ml.total_points,
   ml.submission_count,
   ml.approved_count,
@@ -224,7 +219,6 @@ SELECT
     ELSE 'future'
   END as month_status
 FROM monthly_leaderboards ml
-LEFT JOIN profiles p ON ml.student_id::text = p.id::text
 ORDER BY ml.month_year DESC, ml.total_points DESC;
 
 -- View for top 3 current month performers (for dashboard)
@@ -232,8 +226,6 @@ CREATE OR REPLACE VIEW current_month_top_performers AS
 SELECT
   rank,
   student_id,
-  name,
-  email,
   total_points,
   submission_count,
   approved_count,

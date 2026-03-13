@@ -21,6 +21,8 @@ export default function OrganizationsScreen() {
   const [orgName, setOrgName] = useState('');
   const [orgDescription, setOrgDescription] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
+  const [adminName, setAdminName] = useState('');
+  const [adminPhone, setAdminPhone] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [creating, setCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +72,14 @@ export default function OrganizationsScreen() {
       Alert.alert('Error', 'Admin email is required');
       return;
     }
+    if (!adminName.trim()) {
+      Alert.alert('Error', 'Admin name is required');
+      return;
+    }
+    if (!adminPhone.trim()) {
+      Alert.alert('Error', 'Admin phone is required');
+      return;
+    }
     if (!adminPassword.trim() || adminPassword.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
       return;
@@ -87,6 +97,9 @@ export default function OrganizationsScreen() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: adminEmail,
         password: adminPassword,
+        options: {
+          data: {name: adminName.trim(), phone: adminPhone.trim(), role: "admin"}
+        }
       });
 
       if (authError) throw authError;
@@ -107,9 +120,12 @@ export default function OrganizationsScreen() {
 
       if (orgError) throw orgError;
 
-      // 3. Update auth user metadata with name
+      // 3. Update auth user metadata with name and phone
       const { error: updateError } = await supabase.auth.admin.updateUserById(authData.user.id, {
-        user_metadata: { name: adminEmail.split('@')[0] }
+        user_metadata: { 
+          name: adminName.trim(),
+          phone: adminPhone.trim(),
+        }
       });
 
       if (updateError) throw updateError;
@@ -120,7 +136,7 @@ export default function OrganizationsScreen() {
         .upsert(
           {
             id: authData.user.id,
-            role: 'organization_admin',
+            role: 'admin',
             organization_id: orgData.id,
           },
           { onConflict: 'id' }
@@ -148,6 +164,8 @@ export default function OrganizationsScreen() {
       setOrgName('');
       setOrgDescription('');
       setAdminEmail('');
+      setAdminName('');
+      setAdminPhone('');
       setAdminPassword('');
       setShowCreateModal(false);
       loadOrganizations();
@@ -346,6 +364,33 @@ export default function OrganizationsScreen() {
                   onChangeText={setAdminEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  editable={!creating}
+                />
+              </View>
+
+              {/* Admin Name */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Admin Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter admin's full name"
+                  placeholderTextColor="#cbd5e1"
+                  value={adminName}
+                  onChangeText={setAdminName}
+                  editable={!creating}
+                />
+              </View>
+
+              {/* Admin Phone */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Admin Phone *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter admin's phone number"
+                  placeholderTextColor="#cbd5e1"
+                  value={adminPhone}
+                  onChangeText={setAdminPhone}
+                  keyboardType="phone-pad"
                   editable={!creating}
                 />
               </View>
